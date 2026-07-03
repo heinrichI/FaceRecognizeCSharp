@@ -1,0 +1,80 @@
+<Window x:Class="FaceRecognize.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:FaceRecognize.ViewModels"
+        mc:Ignorable="d"
+        Title="Face Recognition" Height="600" Width="800"
+        WindowStartupLocation="CenterScreen">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+    <Window.Resources>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="ActionBtn" TargetType="Button">
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="MinWidth" Value="100" />
+        </Style>
+    </Window.Resources>
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Known Faces Section -->
+        <GroupBox Grid.Row="0" Header="Known Faces" Margin="0,0,0,12">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="0,8,0,8">
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="Add New Face" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBox Text="{Binding NewFaceName, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="200" Margin="0,0,8,0"
+                                 VerticalContentAlignment="Center" />
+                        <Button Content="Add Face" Command="{Binding AddKnownFaceCommand}"
+                                Style="{StaticResource ActionBtn}" />
+                        <Button Content="Clear All" Command="{Binding ClearAllCommand}"
+                                Style="{StaticResource ActionBtn}" />
+                    </StackPanel>
+                </StackPanel>
+                <ListView ItemsSource="{Binding KnownFaces}" MaxHeight="150">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <TextBlock Text="{Binding Name}" Width="150"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding ImagePath}" Foreground="Gray"
+                                           FontSize="11" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </DockPanel>
+        </GroupBox>
+
+        <!-- Scan Section -->
+        <GroupBox Grid.Row="1" Header="Scan Directory" Margin="0,0,0,12">
+            <StackPanel Margin="0,8,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBox Text="{Binding ScanDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
+                             Width="400" Margin="0,0,8,0"
+                             VerticalContentAlignment="Center" />
+                    <Button Content="Scan" Command="{Binding ScanDirectoryCommand}"
+                            Style="{StaticResource ActionBtn}" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Status -->
+        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}"
+                   Foreground="Gray" Margin="0,8,0,0" />
+    </Grid>
+</Window>

@@ -1,0 +1,10 @@
+<Application x:Class="FaceRecognize.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:FaceRecognize.Converters"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <converters:ImagePathToBitmapConverter x:Key="ImagePathToBitmap" />
+        <converters:ByteArrayToBitmapConverter x:Key="ByteArrayToBitmap" />
+    </Application.Resources>
+</Application>
