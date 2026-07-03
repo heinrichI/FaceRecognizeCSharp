@@ -3,13 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:vm="clr-namespace:FaceRecognize.ViewModels"
         mc:Ignorable="d"
         Title="Face Recognition" Height="600" Width="800"
         WindowStartupLocation="CenterScreen">
-    <Window.DataContext>
-        <vm:MainViewModel />
-    </Window.DataContext>
     <Window.Resources>
         <Style x:Key="SectionHeader" TargetType="TextBlock">
             <Setter Property="FontSize" Value="16" />
@@ -67,6 +63,8 @@
                     <TextBox Text="{Binding ScanDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
                              Width="400" Margin="0,0,8,0"
                              VerticalContentAlignment="Center" />
+                    <Button Content="..." Command="{Binding BrowseDirectoryCommand}"
+                            Style="{StaticResource ActionBtn}" MinWidth="40" Padding="8,8" />
                     <Button Content="Scan" Command="{Binding ScanDirectoryCommand}"
                             Style="{StaticResource ActionBtn}" />
                 </StackPanel>

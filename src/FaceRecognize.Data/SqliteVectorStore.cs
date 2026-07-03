@@ -1,17 +1,17 @@
 using System.IO;
-using FaceRecognize.Models;
+using FaceRecognize.Abstractions;
 using Microsoft.Data.Sqlite;
 
-namespace FaceRecognize.Services;
+namespace FaceRecognize.Data;
 
-public class VectorStore : IDisposable
+public class SqliteVectorStore : IVectorStore
 {
     private readonly string _dbPath;
     private readonly List<KnownFace> _faces = [];
     private readonly object _lock = new();
     private SqliteConnection? _connection;
 
-    public VectorStore(string dbPath)
+    public SqliteVectorStore(string dbPath)
     {
         _dbPath = dbPath;
         Initialize();
@@ -115,7 +115,7 @@ public class VectorStore : IDisposable
 
             foreach (var face in _faces)
             {
-                var score = FaceRecognizer.DotProduct(face.Embedding, embedding);
+                var score = DotProduct(face.Embedding, embedding);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -138,6 +138,14 @@ public class VectorStore : IDisposable
         {
             return [.. _faces];
         }
+    }
+
+    private static float DotProduct(float[] a, float[] b)
+    {
+        float sum = 0;
+        for (int i = 0; i < a.Length; i++)
+            sum += a[i] * b[i];
+        return sum;
     }
 
     private static byte[] FloatsToBytes(float[] floats)

@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using FaceRecognize.Models;
+using FaceRecognize.Abstractions;
 
 namespace FaceRecognize.ViewModels;
 

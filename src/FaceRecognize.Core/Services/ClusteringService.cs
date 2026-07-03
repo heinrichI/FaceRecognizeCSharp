@@ -1,10 +1,10 @@
-using FaceRecognize.Models;
+using FaceRecognize.Abstractions;
 
-namespace FaceRecognize.Services;
+namespace FaceRecognize.Core.Services;
 
-public class ClusteringService
+public class ClusteringService : IClusteringService
 {
-    public static List<PersonCluster> ClusterUnknownFaces(
+    public List<PersonCluster> ClusterUnknownFaces(
         List<(string imagePath, float[] embedding, byte[]? thumbnail)> unknownFaces,
         float eps = 0.42f,
         int minSamples = 2)

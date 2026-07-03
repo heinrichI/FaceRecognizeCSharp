@@ -1,13 +1,14 @@
 using System.IO;
+using FaceRecognize.Abstractions;
 
-namespace FaceRecognize.Services;
+namespace FaceRecognize.Core.Services;
 
-public static class ImageScanner
+public class ImageScanner : IImageScanner
 {
     private static readonly string[] Extensions =
         [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".tiff", ".tif"];
 
-    public static List<string> ScanDirectory(string directory)
+    public List<string> ScanDirectory(string directory)
     {
         if (!Directory.Exists(directory))
             return [];

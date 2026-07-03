@@ -1,5 +1,5 @@
 using System.Windows;
-using FaceRecognize.Models;
+using FaceRecognize.Abstractions;
 using FaceRecognize.ViewModels;
 
 namespace FaceRecognize.Views;

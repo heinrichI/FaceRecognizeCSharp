@@ -1,4 +1,4 @@
-namespace FaceRecognize.Models;
+namespace FaceRecognize.Abstractions;
 
 public class ScanResult
 {

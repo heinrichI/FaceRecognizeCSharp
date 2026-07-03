@@ -1,4 +1,12 @@
-namespace FaceRecognize.Models;
+namespace FaceRecognize.Abstractions;
+
+public interface IClusteringService
+{
+    List<PersonCluster> ClusterUnknownFaces(
+        List<(string imagePath, float[] embedding, byte[]? thumbnail)> unknownFaces,
+        float eps = 0.42f,
+        int minSamples = 2);
+}
 
 public class PersonCluster
 {

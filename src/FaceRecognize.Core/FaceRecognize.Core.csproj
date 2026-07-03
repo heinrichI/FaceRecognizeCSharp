@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FaceAiSharp.Bundle" Version="0.6.35" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.*" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.27.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+    <PackageReference Include="OpenCvSharp5.Windows" Version="5.0.0.20260702" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FaceRecognize.Abstractions\FaceRecognize.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,11 +1,9 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using FaceRecognize.Models;
-using FaceRecognize.Services;
+using FaceRecognize.Abstractions;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
@@ -14,8 +12,10 @@ namespace FaceRecognize.ViewModels;
 
 public partial class MainViewModel : ObservableObject, IDisposable
 {
-    private readonly FaceRecognizer _recognizer;
-    private readonly VectorStore _vectorStore;
+    private readonly IFaceRecognizer _recognizer;
+    private readonly IVectorStore _vectorStore;
+    private readonly IClusteringService _clusteringService;
+    private readonly IImageScanner _imageScanner;
 
     [ObservableProperty] private string _statusMessage = "Ready";
     [ObservableProperty] private string _newFaceName = string.Empty;
@@ -25,12 +25,29 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<KnownFaceViewModel> KnownFaces { get; } = [];
 
-    public MainViewModel()
+    public MainViewModel(
+        IFaceRecognizer recognizer,
+        IVectorStore vectorStore,
+        IClusteringService clusteringService,
+        IImageScanner imageScanner)
     {
-        _recognizer = new FaceRecognizer();
-        _vectorStore = new VectorStore(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "faces.db"));
+        _recognizer = recognizer;
+        _vectorStore = vectorStore;
+        _clusteringService = clusteringService;
+        _imageScanner = imageScanner;
+
         KnownFaceCount = _vectorStore.Count;
         RefreshKnownFaces();
+
+        var modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "lm_model3_opt.onnx");
+        if (!File.Exists(modelPath))
+        {
+            MessageBox.Show(
+                "3D-модель лендмарков не найдена (lm_model3_opt.onnx).\n" +
+                "Выравнивание лиц будет работать в 2D-режиме.\n" +
+                "Скачайте модель в папку Models/ для 3D-нормализации.",
+                "Предупреждение", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     [RelayCommand]
@@ -98,7 +115,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var images = ImageScanner.ScanDirectory(ScanDirectoryPath);
+            var images = _imageScanner.ScanDirectory(ScanDirectoryPath);
             StatusMessage = $"Found {images.Count} images. Processing...";
 
             var results = new List<RecognizedFace>();
@@ -131,10 +148,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Error processing {Path.GetFileName(imgPath)}: {ex.Message}";
+                }
             }
 
-            var clusters = ClusteringService.ClusterUnknownFaces(unknownEmbeddings);
+            var clusters = _clusteringService.ClusterUnknownFaces(unknownEmbeddings);
 
             var scanResult = new ScanResult
             {
@@ -166,6 +186,20 @@ public partial class MainViewModel : ObservableObject, IDisposable
         KnownFaceCount = 0;
         KnownFaces.Clear();
         StatusMessage = "All known faces cleared.";
+    }
+
+    [RelayCommand]
+    private void BrowseDirectory()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select directory with images"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            ScanDirectoryPath = dialog.FolderName;
+        }
     }
 
     private void RefreshKnownFaces()

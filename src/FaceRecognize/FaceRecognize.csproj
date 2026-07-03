@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -9,10 +9,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FaceRecognize.Abstractions\FaceRecognize.Abstractions.csproj" />
+    <ProjectReference Include="..\FaceRecognize.Core\FaceRecognize.Core.csproj" />
+    <ProjectReference Include="..\FaceRecognize.Data\FaceRecognize.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="FaceAiSharp.Bundle" Version="0.6.35" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.27.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.*" />
+    <PackageReference Include="OpenCvSharp5.WpfExtensions" Version="5.0.0.20260702" />
   </ItemGroup>
 
 </Project>
