@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using FaceRecognize.Abstractions;
 using Microsoft.Data.Sqlite;
@@ -79,6 +80,11 @@ public class SqliteVectorStore : IVectorStore
 
     public void Add(KnownFace face)
     {
+        Debug.Assert(!string.IsNullOrWhiteSpace(face.Name), "KnownFace.Name must not be empty");
+        Debug.Assert(!string.IsNullOrWhiteSpace(face.ImagePath), "KnownFace.ImagePath must not be empty");
+        Debug.Assert(face.Id != Guid.Empty, "KnownFace.Id must not be Guid.Empty");
+        Debug.Assert(face.Embedding is { Length: > 0 }, "KnownFace.Embedding must not be empty");
+
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = """
             INSERT INTO known_faces (id, name, image_path, created_at, embedding, thumbnail)
@@ -95,6 +101,7 @@ public class SqliteVectorStore : IVectorStore
         lock (_lock)
         {
             _faces.Add(face);
+            Debug.Assert(_faces.Count(f => f.Id == face.Id) == 1, "Duplicate face Id in store");
         }
     }
 
@@ -125,6 +132,7 @@ public class SqliteVectorStore : IVectorStore
 
     public (KnownFace? best, float score) Search(float[] embedding, float threshold = 0.58f)
     {
+        Debug.Assert(embedding is { Length: > 0 }, "Search embedding must not be empty");
         lock (_lock)
         {
             KnownFace? best = null;
@@ -140,7 +148,10 @@ public class SqliteVectorStore : IVectorStore
                 }
             }
 
-            return bestScore >= threshold ? (best, bestScore) : (null, bestScore);
+            var result = bestScore >= threshold ? best : null;
+            Debug.Assert((result != null) == (bestScore >= threshold),
+                "Search contract: non-null result requires score >= threshold");
+            return (result, bestScore);
         }
     }
 
@@ -159,6 +170,7 @@ public class SqliteVectorStore : IVectorStore
 
     private static float DotProduct(float[] a, float[] b)
     {
+        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
         float sum = 0;
         for (int i = 0; i < a.Length; i++)
             sum += a[i] * b[i];

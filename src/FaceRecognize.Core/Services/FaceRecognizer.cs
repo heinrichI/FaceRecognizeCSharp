@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using FaceAiSharp;
 using FaceAiSharp.Extensions;
@@ -67,7 +68,9 @@ public class FaceRecognizer : IFaceRecognizer
 
         using var cloned = img.Clone();
         _embedder.AlignFaceUsingLandmarks(cloned, face.Landmarks!);
-        return _embedder.GenerateEmbedding(cloned);
+        var embedding = _embedder.GenerateEmbedding(cloned);
+        Debug.Assert(embedding is { Length: > 0 }, "Embedding generator returned empty vector");
+        return embedding;
     }
 
     public List<FaceWithEmbedding> ExtractAllFaces(string imagePath)
@@ -99,6 +102,8 @@ public class FaceRecognizer : IFaceRecognizer
                 embedding = _embedder.GenerateEmbedding(cloned);
             }
 
+            Debug.Assert(embedding is { Length: > 0 }, "Face embedding must not be empty");
+
             results.Add(new FaceWithEmbedding
             {
                 Box = face.Box,
@@ -107,6 +112,7 @@ public class FaceRecognizer : IFaceRecognizer
             });
         }
 
+        Debug.Assert(results.Count == faces.Count, "ExtractAllFaces result count mismatch");
         return results;
     }
 
@@ -147,11 +153,14 @@ public class FaceRecognizer : IFaceRecognizer
 
         bbox = ClampRect(bbox, sourceMat.Width, sourceMat.Height);
         using var aligned = _alignment3D!.AlignFace3D(sourceMat, bbox);
+        Debug.Assert(!aligned.Empty(), "3D alignment produced empty image");
 
         Cv2.ImEncode(".png", aligned, out var buf);
         using var ms = new MemoryStream(buf);
         using var img = Image.Load<Rgb24>(ms);
-        return _embedder.GenerateEmbedding(img);
+        var embedding = _embedder.GenerateEmbedding(img);
+        Debug.Assert(embedding is { Length: > 0 }, "Embedding generator returned empty vector");
+        return embedding;
     }
 
     private static Rect ClampRect(Rect r, int maxWidth, int maxHeight)
@@ -160,12 +169,23 @@ public class FaceRecognizer : IFaceRecognizer
         int y = Math.Max(0, r.Y);
         int w = Math.Min(r.Width, maxWidth - x);
         int h = Math.Min(r.Height, maxHeight - y);
-        return new Rect(x, y, Math.Max(w, 1), Math.Max(h, 1));
+        var rect = new Rect(x, y, Math.Max(w, 1), Math.Max(h, 1));
+        Debug.Assert(rect.X >= 0 && rect.Y >= 0 && rect.Width >= 1 && rect.Height >= 1,
+            "Clamped rect must be non-negative and non-zero sized");
+        return rect;
     }
 
-    public static float DotProduct(float[] a, float[] b) => a.Dot(b);
+    public static float DotProduct(float[] a, float[] b)
+    {
+        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
+        return a.Dot(b);
+    }
 
-    public static float CosineDistance(float[] a, float[] b) => 1f - a.Dot(b);
+    public static float CosineDistance(float[] a, float[] b)
+    {
+        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
+        return 1f - a.Dot(b);
+    }
 
     public void Dispose()
     {

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
@@ -218,6 +219,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 var faces = _recognizer.ExtractAllFaces(path);
                 foreach (var face in faces)
                 {
+                    Debug.Assert(face.Embedding is { Length: > 0 }, "Face embedding must not be empty");
                     var thumb = CreateFaceThumbnail(path, face.Box.X, face.Box.Y, face.Box.Width, face.Box.Height, 128);
                     var knownFace = new KnownFace
                     {
@@ -262,6 +264,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        Debug.Assert(Directory.Exists(ScanDirectoryPath), "Scan directory must exist");
         _scanCts = new CancellationTokenSource();
         var token = _scanCts.Token;
         IsProcessing = true;
@@ -281,6 +284,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
             int processed = 0;
             var lockObj = new object();
             bool cancelled = false;
+
+            Debug.Assert(ThreadCount >= 1, "ThreadCount must be >= 1 for ParallelOptions");
+            var threshold = (float)DistanceThreshold;
 
             var parallelOptions = new ParallelOptions
             {
@@ -331,7 +337,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
                             foreach (var cachedFace in faceArray)
                             {
-                                var (best, score) = _vectorStore.Search(cachedFace.Embedding, (float)DistanceThreshold);
+                                var (best, score) = _vectorStore.Search(cachedFace.Embedding, threshold);
 
                                 if (best != null)
                                 {
@@ -371,6 +377,11 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 cancelled = true;
             }
 
+            Debug.Assert(faceCount == results.Count + unknownEmbeddings.Count, "Face count conservation violated during scan");
+            Debug.Assert(results.All(r => r.Confidence >= threshold), "Known face result below match threshold");
+            if (!cancelled)
+                Debug.Assert(processed == images.Count, "Not all images were processed");
+
             var clusters = _clusteringService.ClusterUnknownFaces(unknownEmbeddings);
 
             var scanResult = new ScanResult
@@ -405,6 +416,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     private void ClearAll()
     {
         _vectorStore.ClearAll();
+        Debug.Assert(_vectorStore.Count == 0, "Vector store not empty after ClearAll");
         KnownFaceCount = 0;
         KnownFaces.Clear();
         StatusMessage = "All known faces cleared.";
@@ -436,6 +448,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 CreatedAt = face.CreatedAt
             });
         }
+
+        Debug.Assert(KnownFaces.Count == _vectorStore.Count, "Known faces view out of sync with store");
     }
 
     private static byte[]? CreateThumbnail(string imagePath, int maxSize)

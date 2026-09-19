@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using FaceRecognize.Abstractions;
 using Microsoft.ML.OnnxRuntime;
@@ -57,6 +58,12 @@ public class ThreeDAlignmentService : IDisposable
     };
 
     private static readonly int[] ContourPoints = { 0, 1, 8, 15, 16, 27, 28, 29, 30, 31, 32, 33, 34, 35 };
+
+    static ThreeDAlignmentService()
+    {
+        Debug.Assert(FaceModel3D.Length == NumLandmarks, "FaceModel3D must contain NumLandmarks points");
+        Debug.Assert(ContourPoints.All(p => p is >= 0 and < NumLandmarks), "ContourPoints index out of landmark range");
+    }
 
     public ThreeDAlignmentService(string onnxModelPath, SessionOptions? sessionOptions = null)
     {
@@ -209,6 +216,8 @@ public class ThreeDAlignmentService : IDisposable
 
         var landmarks = new float[NumLandmarks, 3];
         int gridSize = OutputGrid + 1;
+        Debug.Assert(output.Length == 3 * NumLandmarks * gridSize * gridSize,
+            "Unexpected landmark model output size");
 
         for (int i = 0; i < NumLandmarks; i++)
         {
@@ -225,6 +234,7 @@ public class ThreeDAlignmentService : IDisposable
             }
 
             float conf = maxVal;
+            Debug.Assert(maxVal > 0 && maxVal <= 1, "Landmark confidence outside (0, 1]");
             int gridY = maxIdx / gridSize;
             int gridX = maxIdx % gridSize;
 

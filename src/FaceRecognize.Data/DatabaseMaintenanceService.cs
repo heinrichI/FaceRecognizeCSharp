@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using FaceRecognize.Abstractions;
 
@@ -34,6 +35,9 @@ public class DatabaseMaintenanceService : IDatabaseMaintenanceService
                 removed++;
             }
         }
+
+        Debug.Assert(_vectorStore.GetAll().All(f => File.Exists(f.ImagePath)),
+            "Orphaned entries still present after cleanup");
 
         return removed;
     }

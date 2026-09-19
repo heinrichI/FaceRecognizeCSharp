@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using FaceRecognize.Abstractions;
@@ -19,6 +20,8 @@ public class ModelDownloader : IModelDownloader
         IProgress<int>? progress = null,
         CancellationToken ct = default)
     {
+        Debug.Assert(!string.IsNullOrEmpty(modelPath), "modelPath must not be empty");
+
         if (IsModelPresent(modelPath))
             return true;
 
@@ -47,7 +50,11 @@ public class ModelDownloader : IModelDownloader
                 downloaded += bytesRead;
 
                 if (totalBytes > 0)
-                    progress?.Report((int)(downloaded * 100 / totalBytes));
+                {
+                    var pct = Math.Clamp((int)(downloaded * 100 / totalBytes), 0, 100);
+                    Debug.Assert(pct is >= 0 and <= 100, "Download progress out of range");
+                    progress?.Report(pct);
+                }
             }
 
             await fileStream.FlushAsync(ct);
@@ -58,6 +65,7 @@ public class ModelDownloader : IModelDownloader
                 File.Delete(modelPath);
             File.Move(tempPath, modelPath);
 
+            Debug.Assert(IsModelPresent(modelPath), "Model file missing or too small after successful download");
             return true;
         }
         catch

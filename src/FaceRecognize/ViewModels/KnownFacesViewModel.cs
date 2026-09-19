@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FaceRecognize.Abstractions;
@@ -40,6 +41,9 @@ public partial class KnownFacesViewModel : ObservableObject
         People.Clear();
         foreach (var person in grouped)
             People.Add(person);
+
+        Debug.Assert(People.Sum(p => p.DescriptorCount) == allFaces.Count, "Total descriptor count mismatch");
+        Debug.Assert(People.All(p => p.Faces.Count == p.DescriptorCount), "Person descriptor count inconsistent with faces");
     }
 }
 

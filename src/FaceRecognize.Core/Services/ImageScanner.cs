@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using FaceRecognize.Abstractions;
 
@@ -18,6 +19,8 @@ public class ImageScanner : IImageScanner
         {
             images.AddRange(Directory.GetFiles(directory, $"*{ext}", SearchOption.AllDirectories));
         }
+
+        Debug.Assert(images.Count == images.Distinct().Count(), "Duplicate image paths in scan results");
         return images;
     }
 }

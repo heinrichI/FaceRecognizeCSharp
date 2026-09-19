@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FaceRecognize.Abstractions;
 
 namespace FaceRecognize.Core.Services;
@@ -9,6 +10,9 @@ public class ClusteringService : IClusteringService
         float eps = 0.42f,
         int minSamples = 2)
     {
+        Debug.Assert(eps > 0, "eps must be positive");
+        Debug.Assert(minSamples >= 1, "minSamples must be >= 1");
+
         if (unknownFaces.Count == 0)
             return [];
 
@@ -51,6 +55,12 @@ public class ClusteringService : IClusteringService
         if (noise.Faces.Count > 0)
             result.Add(noise);
 
+        Debug.Assert(result.Sum(c => c.Faces.Count) == unknownFaces.Count, "Clustering lost or duplicated faces");
+        Debug.Assert(result.Count(c => c.ClusterId == -1) <= 1, "At most one noise cluster expected");
+        Debug.Assert(result.All(c => c.Faces.Count > 0), "Cluster with no faces");
+        Debug.Assert(result.All(c => c.ClusterId == -1 || c.Centroid.Length == c.Faces[0].Embedding.Length),
+            "Cluster centroid dimension mismatch");
+
         return result;
     }
 
@@ -90,6 +100,28 @@ public class ClusteringService : IClusteringService
             clusterId++;
         }
 
+        Debug.Assert(labels.All(l => l >= -1 && l < clusterId), "Invalid DBSCAN label range");
+
+        // Each non-noise point must be a core point or a border point
+        // (has some same-cluster neighbor within eps). Singleton clusters
+        // of core points are legal, so the neighbor scan is full, not forward-only.
+        for (int i = 0; i < n; i++)
+        {
+            if (labels[i] == -1) continue;
+
+            bool hasNeighbor = false;
+            for (int j = 0; j < n && !hasNeighbor; j++)
+            {
+                if (j == i) continue;
+                hasNeighbor = labels[j] == labels[i]
+                               && 1f - FaceRecognizer.DotProduct(embeddings[i], embeddings[j]) <= eps;
+            }
+
+            bool isCore = RangeQuery(embeddings, i, eps).Count >= minSamples;
+            Debug.Assert(isCore || hasNeighbor,
+                $"DBSCAN point {i} is neither a core point nor a border point of its cluster");
+        }
+
         return labels;
     }
 
@@ -113,6 +145,8 @@ public class ClusteringService : IClusteringService
         if (embeddings.Count == 0) return [];
 
         int dim = embeddings[0].Length;
+        Debug.Assert(dim > 0, "Empty embedding in centroid computation");
+        Debug.Assert(embeddings.All(e => e.Length == dim), "Embedding dimensions must be uniform");
         var centroid = new float[dim];
 
         foreach (var emb in embeddings)

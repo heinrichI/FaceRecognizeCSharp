@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using FaceRecognize.Abstractions;
@@ -47,15 +48,19 @@ public class SqliteEmbeddingCache : IEmbeddingCache
         {
             // Try new format first (List<CachedFace>)
             var faces = JsonSerializer.Deserialize<List<CachedFace>>(json);
-            if (faces != null && faces.Count > 0)
-                return faces;
+            if (faces == null || faces.Count == 0)
+            {
+                // Fallback: old format (List<float[]>)
+                var embeddings = JsonSerializer.Deserialize<List<float[]>>(json);
+                faces = embeddings != null && embeddings.Count > 0
+                    ? embeddings.Select(e => new CachedFace { Embedding = e }).ToList()
+                    : null;
+            }
 
-            // Fallback: old format (List<float[]>)
-            var embeddings = JsonSerializer.Deserialize<List<float[]>>(json);
-            if (embeddings != null && embeddings.Count > 0)
-                return embeddings.Select(e => new CachedFace { Embedding = e }).ToList();
+            if (faces != null)
+                Debug.Assert(faces.All(f => f.Embedding is { Length: > 0 }), "Cached face has empty embedding");
 
-            return null;
+            return faces;
         }
         catch
         {
@@ -65,6 +70,9 @@ public class SqliteEmbeddingCache : IEmbeddingCache
 
     public void Store(string imagePath, long fileSize, DateTime lastModified, List<CachedFace> faces)
     {
+        Debug.Assert(!string.IsNullOrEmpty(imagePath), "imagePath must not be empty");
+        Debug.Assert(faces is { Count: > 0 }, "Refusing to store empty face list");
+
         var json = JsonSerializer.Serialize(faces);
 
         using var cmd = _connection.CreateCommand();
