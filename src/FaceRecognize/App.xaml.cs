@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
+using FaceRecognize.Abstractions;
 using FaceRecognize.Core.Extensions;
+using FaceRecognize.Data;
 using FaceRecognize.Data.Extensions;
 using FaceRecognize.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,13 +17,20 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        var basePath = AppDomain.CurrentDomain.BaseDirectory;
+        var dbPath = Path.Combine(basePath, "faces.db");
+        var configPath = Path.Combine(basePath, "config.json");
+
+        // Load config first to get ModelsDirectory
+        var config = new JsonConfiguration(configPath);
+
+        var modelPath = !string.IsNullOrEmpty(config.ModelsDirectory)
+            ? Path.Combine(config.ModelsDirectory, "lm_model3_opt.onnx")
+            : Path.Combine(basePath, "Models", "lm_model3_opt.onnx");
+
         var services = new ServiceCollection();
-
-        var modelPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "lm_model3_opt.onnx");
-        var dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "faces.db");
-
         services.AddFaceRecognition(File.Exists(modelPath) ? modelPath : null);
-        services.AddData(dbPath);
+        services.AddData(dbPath, configPath);
         services.AddSingleton<MainViewModel>();
 
         ServiceProvider = services.BuildServiceProvider();

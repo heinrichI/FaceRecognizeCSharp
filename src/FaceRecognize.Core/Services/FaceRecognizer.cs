@@ -15,6 +15,8 @@ public class FaceRecognizer : IFaceRecognizer
     private readonly IFaceEmbeddingsGenerator _embedder;
     private readonly ThreeDAlignmentService? _alignment3D;
 
+    public bool Is3DAlignmentAvailable => _alignment3D != null;
+
     public FaceRecognizer(string? landmarkOnnxPath = null)
     {
         var opts = new SessionOptions

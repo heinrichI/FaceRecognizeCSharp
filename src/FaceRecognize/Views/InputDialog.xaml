@@ -1,0 +1,18 @@
+<Window x:Class="FaceRecognize.Views.InputDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Input" Height="150" Width="350"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <StackPanel Margin="16">
+        <TextBlock x:Name="PromptText" TextWrapping="Wrap" Margin="0,0,0,8" />
+        <ComboBox x:Name="NameComboBox" IsEditable="True" Margin="0,0,0,12"
+                  Text="{Binding SelectedName, UpdateSourceTrigger=PropertyChanged}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="OK" Width="75" Margin="0,0,8,0" IsDefault="True"
+                    Click="Ok_Click" />
+            <Button Content="Cancel" Width="75" IsCancel="True"
+                    Click="Cancel_Click" />
+        </StackPanel>
+    </StackPanel>
+</Window>

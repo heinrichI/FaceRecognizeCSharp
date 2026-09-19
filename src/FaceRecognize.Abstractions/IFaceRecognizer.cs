@@ -5,6 +5,7 @@ namespace FaceRecognize.Abstractions;
 
 public interface IFaceRecognizer : IDisposable
 {
+    bool Is3DAlignmentAvailable { get; }
     List<FaceDetectionResult> DetectFaces(string imagePath);
     float[] ExtractEmbedding(string imagePath);
     List<FaceWithEmbedding> ExtractAllFaces(string imagePath);

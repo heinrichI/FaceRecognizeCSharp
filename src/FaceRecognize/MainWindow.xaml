@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Face Recognition" Height="600" Width="800"
+        Title="Face Recognition" Height="650" Width="800"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style x:Key="SectionHeader" TargetType="TextBlock">
@@ -18,61 +18,113 @@
             <Setter Property="MinWidth" Value="100" />
         </Style>
     </Window.Resources>
-    <Grid Margin="16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <DockPanel Margin="2">
+        <!-- Menu -->
+        <Menu DockPanel.Dock="Top" Margin="0,0,0,8">
+            <MenuItem Header="Database">
+                <MenuItem Header="Cleanup orphaned records"
+                          Command="{Binding CleanupDatabaseCommand}" />
+                <MenuItem Header="Clear embedding cache"
+                          Command="{Binding ClearCacheCommand}" />
+            </MenuItem>
+        </Menu>
 
-        <!-- Known Faces Section -->
-        <GroupBox Grid.Row="0" Header="Known Faces" Margin="0,0,0,12">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Margin="0,8,0,8">
-                    <TextBlock Style="{StaticResource SectionHeader}" Text="Add New Face" />
+        <!-- Progress Bar -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0"
+                    Visibility="{Binding ProgressVisible}">
+            <ProgressBar Value="{Binding ProgressValue}"
+                         Maximum="{Binding ProgressMaximum}"
+                         Height="10" Margin="0,0,0,4" />
+            <TextBlock Text="{Binding ProgressText}"
+                       Foreground="Gray" FontSize="11"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Status -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Gray" />
+            <TextBlock Text="{Binding AlignmentStatus}" Foreground="Gray" Margin="16,0,0,0" />
+        </StackPanel>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Known Faces Section -->
+            <GroupBox Grid.Row="0" Header="Known Faces" Margin="0,0,0,12">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,8,0,8">
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="Add New Face" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox Text="{Binding NewFaceName, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="200" Margin="0,0,8,0"
+                                     VerticalContentAlignment="Center" />
+                            <Button Content="Add Face" Command="{Binding AddKnownFaceCommand}"
+                                    Style="{StaticResource ActionBtn}" />
+                            <Button Content="Clear All" Command="{Binding ClearAllCommand}"
+                                    Style="{StaticResource ActionBtn}" />
+                            <Button Content="Known Faces" Command="{Binding ShowKnownFacesCommand}"
+                                    Style="{StaticResource ActionBtn}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <ListView ItemsSource="{Binding KnownFaces}" MaxHeight="150">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <TextBlock Text="{Binding Name}" Width="150"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ImagePath}" Foreground="Gray"
+                                               FontSize="11" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </DockPanel>
+            </GroupBox>
+
+            <!-- Scan Section -->
+            <GroupBox Grid.Row="1" Header="Scan Directory" Margin="0,0,0,12">
+                <StackPanel Margin="0,8,0,0">
                     <StackPanel Orientation="Horizontal">
-                        <TextBox Text="{Binding NewFaceName, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="200" Margin="0,0,8,0"
+                        <TextBox Text="{Binding ScanDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="400" Margin="0,0,8,0"
                                  VerticalContentAlignment="Center" />
-                        <Button Content="Add Face" Command="{Binding AddKnownFaceCommand}"
+                        <Button Content="..." Command="{Binding BrowseDirectoryCommand}"
+                                Style="{StaticResource ActionBtn}" MinWidth="40" Padding="8,8" />
+                        <Button Content="Scan" Command="{Binding ScanDirectoryCommand}"
                                 Style="{StaticResource ActionBtn}" />
-                        <Button Content="Clear All" Command="{Binding ClearAllCommand}"
+                        <Button Content="Stop" Command="{Binding StopScanCommand}"
                                 Style="{StaticResource ActionBtn}" />
                     </StackPanel>
                 </StackPanel>
-                <ListView ItemsSource="{Binding KnownFaces}" MaxHeight="150">
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Orientation="Horizontal" Margin="0,2">
-                                <TextBlock Text="{Binding Name}" Width="150"
-                                           VerticalAlignment="Center" />
-                                <TextBlock Text="{Binding ImagePath}" Foreground="Gray"
-                                           FontSize="11" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-            </DockPanel>
-        </GroupBox>
+            </GroupBox>
 
-        <!-- Scan Section -->
-        <GroupBox Grid.Row="1" Header="Scan Directory" Margin="0,0,0,12">
-            <StackPanel Margin="0,8,0,0">
-                <StackPanel Orientation="Horizontal">
-                    <TextBox Text="{Binding ScanDirectoryPath, UpdateSourceTrigger=PropertyChanged}"
-                             Width="400" Margin="0,0,8,0"
-                             VerticalContentAlignment="Center" />
-                    <Button Content="..." Command="{Binding BrowseDirectoryCommand}"
-                            Style="{StaticResource ActionBtn}" MinWidth="40" Padding="8,8" />
-                    <Button Content="Scan" Command="{Binding ScanDirectoryCommand}"
-                            Style="{StaticResource ActionBtn}" />
-                </StackPanel>
-            </StackPanel>
-        </GroupBox>
+            <!-- Settings -->
+            <GroupBox Grid.Row="2" Header="Settings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,8,0,0">
+                        <TextBlock Text="Models Directory" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding ModelsDirectory, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,12" />
 
-        <!-- Status -->
-        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}"
-                   Foreground="Gray" Margin="0,8,0,0" />
-    </Grid>
+                        <TextBlock Text="Distance Threshold" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding DistanceThreshold, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="100" HorizontalAlignment="Left" Margin="0,0,0,12" />
+
+                        <TextBlock Text="Thread Count" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBox Text="{Binding ThreadCount, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="100" HorizontalAlignment="Left" Margin="0,0,0,12" />
+
+                        <TextBlock Text="3D Alignment" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding AlignmentStatus}" Foreground="Gray" Margin="0,0,0,8" />
+                        <Button Content="Download 3D Model" Command="{Binding DownloadModelCommand}"
+                                Style="{StaticResource ActionBtn}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </GroupBox>
+        </Grid>
+    </DockPanel>
 </Window>

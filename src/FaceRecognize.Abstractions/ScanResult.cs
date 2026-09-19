@@ -1,5 +1,7 @@
 namespace FaceRecognize.Abstractions;
 
+public enum DisplayMode { All, KnownOnly, UnknownOnly }
+
 public class ScanResult
 {
     public List<RecognizedFace> KnownFaces { get; set; } = [];

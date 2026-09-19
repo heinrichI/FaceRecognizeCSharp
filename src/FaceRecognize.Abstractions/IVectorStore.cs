@@ -17,4 +17,5 @@ public class KnownFace
     public string ImagePath { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public float[] Embedding { get; set; } = [];
+    public byte[]? Thumbnail { get; set; }
 }

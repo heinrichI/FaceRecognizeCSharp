@@ -11,11 +11,6 @@ WPF-приложение для распознавания лиц с класт�
 3. Выберите **1 или несколько фото** этого человека в диалоге
 4. Приложение извлечёт лицо с каждого фото и сохранит в базу
 
-**Что вбивать в поле "Add New Face":**
-- Просто имя: `Иван`, `Аня`, `Начальник`
-- Имя + фамилия: `Иван Петров`
-- Любая метка, по которой вы потом узнаете человека
-
 **Советы:**
 - Добавьте **2-5 фото** одного человека для лучшего распознавания
 - Фото должны содержать **чёткое лицо** (не размытое, не затемнённое)
@@ -28,12 +23,48 @@ WPF-приложение для распознавания лиц с класт�
 3. Нажмите **"Scan"**
 4. Приложение обработает все фото в папке (и подпапках)
 
+**Остановка:** Кнопка **"Stop"** прерывает сканирование и показывает результаты, найденные на данный момент.
+
 ### Шаг 3: Посмотрите результаты
 
-Откроется окно результатов:
+Откроется окно результатов с тремя режимами отображения:
 
-- **Known Faces** — фото, где распознаны добавленные ранее люди (имя + уверенность)
-- **Unknown Clusters** — группы похожих лиц, которых нет в базе
+- **All** — и известные, и неизвестные лица
+- **KnownOnly** — только известные лица
+- **UnknownOnly** — только неизвестные лица + панель исключений
+
+**Действия с лицами:**
+- **Двойной клик** — открыть исходное изображение в связанной программе
+- **Правый клик** → Add to known — добавить лицо в базу (выбор имени из существующих или ввод нового)
+- **Правый клик** → Show info — информация о файле
+
+**Панель исключений (в режиме UnknownOnly):**
+- Чекбоксы с именами известных людей
+- Отмеченные имена скрываются из результатов
+
+## Меню Database
+
+- **Cleanup orphaned records** — удалить записи для несуществующих файлов
+- **Clear embedding cache** — очистить кэш эмбеддингов
+
+## Окно Known Faces
+
+Кнопка **"Known Faces"** в главном окне открывает таблицу со всеми известными людьми:
+- Имя
+- Количество дескрипторов (эмбеддингов)
+- Миниатюры лиц (из кэша в базе)
+
+## Настройки
+
+В секции **Settings** главного окна:
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| Models Directory | (пусто) | Папка с моделями ONNX |
+| Distance Threshold | 0.58 | Порог распознавания (cosine similarity) |
+| Thread Count | кол-во ядер | Количество потоков обработки |
+
+Настройки сохраняются в `config.json` при закрытии приложения.
 
 ## Сборка и запуск
 
@@ -54,48 +85,30 @@ dotnet build FaceRecognize.sln
 dotnet run --project src/FaceRecognize
 ```
 
-### Тесты
-
-```bash
-dotnet test tests/FaceRecognize.Core.Tests
-```
-
-## Пример использования
-
-```
-1. Добавить лицо:
-   Поле "Add New Face": Scarlett Johansson
-   → Выбрать 3 фото Скарлетт
-   → "Added 3 face(s) for 'Scarlett Johansson'"
-
-2. Добавить ещё одно лицо:
-   Поле "Add New Face": Angelina Jolie
-   → Выбрать 2 фото Анджелины
-   → "Added 2 face(s) for 'Angelina Jolie'"
-
-3. Сканировать папку:
-   Ввести путь: C:\Photos\Hollywood
-   → Нажать Scan
-   → Результат: 5 распознано, 12 неизвестных в 3 кластерах
-```
-
 ## Архитектура
 
 ```
 FaceRecognize.sln
 ├── src/
-│   ├── FaceRecognize.Core/     ← Class Library (net9.0)
-│   │   Services/               FaceRecognizer, ThreeDAlignmentService,
-│   │                           VectorStore, ClusteringService, ImageScanner
-│   │   Models/                 KnownFace, PersonCluster, ScanResult
+│   ├── FaceRecognize.Abstractions/  ← Интерфейсы и модели
+│   │   IFaceRecognizer, IVectorStore, IClusteringService,
+│   │   IImageScanner, IEmbeddingCache, IConfiguration,
+│   │   KnownFace, ScanResult, DisplayMode
 │   │
-│   └── FaceRecognize/          ← WPF App (net9.0-windows)
-│       ViewModels/             MainViewModel, ResultsViewModel
-│       Views/                  MainWindow, ResultsWindow
-│       Converters/             ByteArrayToBitmap, ImagePathToBitmap
-│
-└── tests/
-    └── FaceRecognize.Core.Tests/  ← xUnit Integration Tests
+│   ├── FaceRecognize.Core/          ← Бизнес-логика
+│   │   Services/  FaceRecognizer (ArcFace + 3D alignment),
+│   │              ClusteringService (DBSCAN), ImageScanner
+│   │
+│   ├── FaceRecognize.Data/          ← Хранение данных
+│   │   SqliteVectorStore, SqliteEmbeddingCache,
+│   │   JsonConfiguration, DatabaseMaintenanceService
+│   │
+│   └── FaceRecognize/               ← WPF UI
+│       ViewModels/  MainViewModel, ResultsViewModel,
+│                    KnownFacesViewModel
+│       Views/       MainWindow, ResultsWindow,
+│                    KnownFacesWindow, InputDialog
+│       Converters/  ByteArrayToBitmap, ImagePathToBitmap
 ```
 
 ## Технологический стек
@@ -104,28 +117,35 @@ FaceRecognize.sln
 |-----------|------------|
 | Язык | C# (.NET 9) |
 | UI | WPF (MVVM, CommunityToolkit.Mvvm) |
+| DI | Microsoft.Extensions.DependencyInjection |
 | Детекция лиц | FaceAiSharp (SCRFD + ArcFace) |
 | 3D-нормализация | OpenCvSharp5 (solvePnP + WarpPerspective) |
-| ONNX-инференс | Microsoft.ML.OnnxRuntime + DirectML |
+| ONNX-инференс | Microsoft.ML.OnnxRuntime |
 | База данных | SQLite (Microsoft.Data.Sqlite) |
+| Кэш эмбеддингов | SQLite (embedding_cache.db) |
 | Кластеризация | DBSCAN (собственная реализация) |
-| Тесты | xUnit |
 
 ## 3D-нормализация (опционально)
 
 Для улучшения распознавания лиц при сильных поворотах головы (>30°) доступна 3D-нормализация:
 
-1. Скачайте модель `face_landmark.onnx` (MediaPipe face landmark, ~5MB)
-2. Поместите в папку `Models/` рядом с исполняемым файлом
-3. При запуске приложение автоматически переключится на 3D-режим
+1. Скачайте модель `lm_model3_opt.onnx` (~5MB)
+2. Поместите в папку `Models/` рядом с исполняемым файлом (или укажите путь в настройках)
+3. При запуске в статус-баре отобразится "3D: Active"
 
-Если модель не найдена — приложение покажет предупреждение и будет работать в стандартном 2D-режиме.
+Если модель не найдена — статус покажет "3D: Not available" и приложение будет работать в стандартном 2D-режиме.
 
-**Важно:** Скачайте 3D-модель **до** добавления лиц в базу. Сохранённые эмбеддинги пересчитываются только при повторном добавлении. Если вы сначала добавили лица без 3D, а потом подключили модель — удалите базу ("Clear All") и добавьте лица заново.
+## Кэш эмбеддингов
+
+Для ускорения повторного сканирования приложение кэширует эмбеддинги в `embedding_cache.db`:
+
+- Ключ: путь к файлу + размер + дата модификации
+- При повторном сканировании того же файла — эмбеддинги читаются из кэша без пересчёта
+- Очистка: Database → Clear embedding cache
 
 ## Как хранятся лица
 
-Лица хранятся в SQLite-базе `faces.db` как **эмбеддинги** — числовые векторы.
+Лица хранятся в SQLite-базе `faces.db` как **эмбеддинги** — числовые векторы + thumbnails.
 
 ### Формат хранения
 
@@ -134,36 +154,28 @@ FaceRecognize.sln
 | Столбец | Тип | Что хранит |
 |---------|-----|------------|
 | `id` | TEXT (GUID) | Уникальный ID записи |
-| `name` | TEXT | Имя которое вы ввели ("Иван", "Мама") |
+| `name` | TEXT | Имя которое вы ввели |
 | `image_path` | TEXT | Путь к исходному фото |
 | `created_at` | TEXT | Дата добавления |
-| `embedding` | BLOB | **512 float32 чисел** (2048 байт) |
+| `embedding` | BLOB | 512 float32 чисел (2048 байт) |
+| `thumbnail` | BLOB | 64x64 JPEG миниатюра (~3-5 KB) |
 
 ### Что такое embedding
 
-Это вектор из 512 чисел с плавающей точкой, который нейросеть ArcFace извлекает из лица:
+Вектор из 512 чисел с плавающей точкой, который нейросеть ArcFace извлекает из лица:
 
 ```
 [0.032, -0.156, 0.089, 0.241, ..., 0.067]  ← 512 чисел
 ```
 
-**Само фото не сохраняется** — только путь к нему + его математическое представление. При распознавании новое фото превращается в такой же вектор и сравнивается с сохранёнными через cosine similarity.
+При распознавании новое фото превращается в такой же вектор и сравнивается с сохранёнными через cosine similarity.
 
 ### Как работает сравнение
 
 Когда вы сканируете папку, приложение:
-1. Извлекает embedding из нового фото (512 чисел)
-2. Считает cosine similarity с каждым сохранённым embedding
-3. Если score > 0.58 — это тот человек, которого вы добавляли
-
-## Параметры
-
-| Параметр | Значение | Описание |
-|----------|----------|----------|
-| similarity_threshold | 0.58 | Порог распознавания (cosine similarity) |
-| dbscan_eps | 0.42 | Радиус кластера DBSCAN |
-| dbscan_min_samples | 2 | Мин. лиц в кластере |
-
-## Лицензия
-
-MIT License
+1. Проверяет кэш эмбеддингов
+2. Если кэш есть — использует его
+3. Если нет — извлекает embedding из нового фото (512 чисел)
+4. Считает cosine similarity с каждым сохранённым embedding
+5. Если score > порога (по умолчанию 0.58) — это тот человек
+6. Неизвестные лица группируются в кластеры (DBSCAN)

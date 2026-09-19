@@ -8,6 +8,7 @@ public static class ServiceCollectionExtensions
 {
     public static void AddFaceRecognition(this IServiceCollection services, string? landmarkOnnxPath = null)
     {
+        services.AddSingleton<IModelDownloader, ModelDownloader>();
         services.AddSingleton<IFaceRecognizer>(sp => new FaceRecognizer(landmarkOnnxPath));
         services.AddSingleton<IClusteringService, ClusteringService>();
         services.AddSingleton<IImageScanner, ImageScanner>();

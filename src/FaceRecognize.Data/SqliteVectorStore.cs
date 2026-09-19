@@ -33,10 +33,25 @@ public class SqliteVectorStore : IVectorStore
                 name TEXT NOT NULL,
                 image_path TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                embedding BLOB NOT NULL
+                embedding BLOB NOT NULL,
+                thumbnail BLOB
             )
             """;
         cmd.ExecuteNonQuery();
+
+        // Migration: add thumbnail column if missing
+        try
+        {
+            using var check = _connection.CreateCommand();
+            check.CommandText = "SELECT thumbnail FROM known_faces LIMIT 1";
+            check.ExecuteScalar();
+        }
+        catch
+        {
+            using var alter = _connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE known_faces ADD COLUMN thumbnail BLOB";
+            alter.ExecuteNonQuery();
+        }
 
         LoadAll();
     }
@@ -44,7 +59,7 @@ public class SqliteVectorStore : IVectorStore
     private void LoadAll()
     {
         using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT id, name, image_path, created_at, embedding FROM known_faces";
+        cmd.CommandText = "SELECT id, name, image_path, created_at, embedding, thumbnail FROM known_faces";
 
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
@@ -55,7 +70,8 @@ public class SqliteVectorStore : IVectorStore
                 Name = reader.GetString(1),
                 ImagePath = reader.GetString(2),
                 CreatedAt = DateTime.Parse(reader.GetString(3)),
-                Embedding = BytesToFloats(reader.GetFieldValue<byte[]>(4))
+                Embedding = BytesToFloats(reader.GetFieldValue<byte[]>(4)),
+                Thumbnail = reader.IsDBNull(5) ? null : reader.GetFieldValue<byte[]>(5)
             };
             _faces.Add(face);
         }
@@ -65,14 +81,15 @@ public class SqliteVectorStore : IVectorStore
     {
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO known_faces (id, name, image_path, created_at, embedding)
-            VALUES ($id, $name, $image_path, $created_at, $embedding)
+            INSERT INTO known_faces (id, name, image_path, created_at, embedding, thumbnail)
+            VALUES ($id, $name, $image_path, $created_at, $embedding, $thumbnail)
             """;
         cmd.Parameters.AddWithValue("$id", face.Id.ToString());
         cmd.Parameters.AddWithValue("$name", face.Name);
         cmd.Parameters.AddWithValue("$image_path", face.ImagePath);
         cmd.Parameters.AddWithValue("$created_at", face.CreatedAt.ToString("O"));
         cmd.Parameters.AddWithValue("$embedding", FloatsToBytes(face.Embedding));
+        cmd.Parameters.AddWithValue("$thumbnail", (object?)face.Thumbnail ?? DBNull.Value);
         cmd.ExecuteNonQuery();
 
         lock (_lock)
