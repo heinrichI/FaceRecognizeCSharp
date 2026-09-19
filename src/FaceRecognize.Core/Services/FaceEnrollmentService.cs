@@ -20,6 +20,17 @@ public class FaceEnrollmentService : IFaceEnrollmentService
         _clusteringService = clusteringService;
     }
 
+    /// <summary>Последнее имя при регистрации — в памяти сессии (общее для всех диалогов).</summary>
+    public string LastEnrolledName { get; private set; } = string.Empty;
+
+    private void SetLastEnrolledName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || LastEnrolledName == name)
+            return;
+
+        LastEnrolledName = name;
+    }
+
     public List<string> GetExistingNames(IReadOnlyList<string>? extraNames = null)
     {
         var names = _vectorStore.GetAll().Select(f => f.Name);
@@ -29,40 +40,55 @@ public class FaceEnrollmentService : IFaceEnrollmentService
         return names.Distinct().Order().ToList();
     }
 
-    public int EnrollByName(string name, IReadOnlyList<string> imagePaths, IProgress<int>? progress = null)
+    public EnrollByNameResult EnrollByName(string name, IReadOnlyList<string> imagePaths, IProgress<int>? progress = null)
     {
         Debug.Assert(!string.IsNullOrWhiteSpace(name), "Person name must not be empty");
 
+        var outcomes = new List<EnrollFileOutcome>(imagePaths.Count);
         int added = 0;
         for (int i = 0; i < imagePaths.Count; i++)
         {
             var path = imagePaths[i];
+            int facesAdded = 0;
+            string? error = null;
+
             try
             {
                 var faces = _recognizer.ExtractAllFaces(path);
-                foreach (var face in faces)
+                if (faces.Count == 0)
                 {
-                    Debug.Assert(face.Embedding is { Length: > 0 }, "Face embedding must not be empty");
-                    var thumb = FaceThumbnail.Create(path, face.Box, 128);
-                    _vectorStore.Add(new KnownFace
+                    error = "no face found";
+                }
+                else
+                {
+                    foreach (var face in faces)
                     {
-                        Name = name,
-                        ImagePath = path,
-                        Embedding = face.Embedding,
-                        Thumbnail = thumb
-                    });
-                    added++;
+                        Debug.Assert(face.Embedding is { Length: > 0 }, "Face embedding must not be empty");
+                        var thumb = FaceThumbnail.Create(path, face.Box, 128);
+                        _vectorStore.Add(new KnownFace
+                        {
+                            Name = name,
+                            ImagePath = path,
+                            Embedding = face.Embedding,
+                            Thumbnail = thumb
+                        });
+                        facesAdded++;
+                    }
+                    added += facesAdded;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip unprocessable files
+                // Не теряем файл без следа: причина фиксируется в отчёте
+                error = ex.Message;
             }
 
+            outcomes.Add(new EnrollFileOutcome(path, facesAdded, error));
             progress?.Report(i + 1);
         }
 
-        return added;
+        SetLastEnrolledName(name);
+        return new EnrollByNameResult(added, outcomes);
     }
 
     public AddToKnownResult AddToKnown(AddToKnownRequest request)
@@ -83,6 +109,7 @@ public class FaceEnrollmentService : IFaceEnrollmentService
             Embedding = detected.Embedding,
             Thumbnail = thumb
         });
+        SetLastEnrolledName(request.Name);
         Debug.Assert(_vectorStore.Count == countBefore + 1, "Vector store count did not increase by 1 after Add");
 
         // Re-check: which of the remaining unknown faces now match the updated store?

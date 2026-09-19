@@ -59,9 +59,35 @@
                     <StackPanel DockPanel.Dock="Top" Margin="0,8,0,8">
                         <TextBlock Style="{StaticResource SectionHeader}" Text="Add New Face" />
                         <StackPanel Orientation="Horizontal">
-                            <TextBox Text="{Binding NewFaceName, UpdateSourceTrigger=PropertyChanged}"
-                                     Width="200" Margin="0,0,8,0"
-                                     VerticalContentAlignment="Center" />
+                            <Grid Width="200" Margin="0,0,8,0">
+                                <TextBox x:Name="NewFaceNameBox"
+                                         Text="{Binding NewFaceName, UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalContentAlignment="Center">
+                                    <TextBox.ToolTip>
+                                        <TextBlock TextWrapping="Wrap" MaxWidth="340">
+                                            <Run FontWeight="SemiBold" Text="Поле для имени человека (необязательно)" />
+                                            <LineBreak />
+                                            <Run Text="Нажмите «Add Face» — откроется диалог выбора файлов, где нужно указать одно или несколько изображений, на которых видно лицо." />
+                                            <LineBreak />
+                                            <Run Text="Если имя в это поле не введено, после выбора файлов оно будет запрошено отдельным диалогом (со списком уже известных имён)." />
+                                        </TextBlock>
+                                    </TextBox.ToolTip>
+                                </TextBox>
+                                <TextBlock Text="Например: Ivanov Ivan" Foreground="Gray"
+                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                           IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, ElementName=NewFaceNameBox}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
                             <Button Content="Add Face" Command="{Binding AddKnownFaceCommand}"
                                     Style="{StaticResource ActionBtn}" />
                             <Button Content="Clear All" Command="{Binding ClearAllCommand}"

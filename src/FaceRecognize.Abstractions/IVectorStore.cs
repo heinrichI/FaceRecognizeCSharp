@@ -8,6 +8,9 @@ public interface IVectorStore : IDisposable
     (KnownFace? best, float score) Search(float[] embedding, float threshold);
     int Count { get; }
     List<KnownFace> GetAll();
+
+    /// <summary>Перечитывает хранилище из файла БД (синхронизирует в-памяти список с диском).</summary>
+    void Reload();
 }
 
 public class KnownFace

@@ -6,8 +6,11 @@
         ResizeMode="NoResize">
     <StackPanel Margin="16">
         <TextBlock x:Name="PromptText" TextWrapping="Wrap" Margin="0,0,0,8" />
-        <ComboBox x:Name="NameComboBox" IsEditable="True" Margin="0,0,0,12"
-                  Text="{Binding SelectedName, UpdateSourceTrigger=PropertyChanged}" />
+        <ComboBox x:Name="NameComboBox" IsEditable="True" Margin="0,0,0,12" />
+        <!--
+            ВНИМАНИЕ: не добавлять сюда привязку Text={...} — при отсутствии источника
+            она при показе окна затирает предвыбранное значение (Text и SelectedIndex).
+        -->
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="OK" Width="75" Margin="0,0,8,0" IsDefault="True"
                     Click="Ok_Click" />

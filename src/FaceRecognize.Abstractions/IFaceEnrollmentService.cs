@@ -14,6 +14,18 @@ public sealed class AddToKnownResult
     public List<PersonCluster> RemainingClusters { get; init; } = [];
 }
 
+/// <summary>Итог по одному файлу при регистрации: сколько лиц добавлено и причина пропуска (null — успех).</summary>
+public sealed record EnrollFileOutcome(string Path, int FacesAdded, string? Error)
+{
+    public bool Skipped => Error is not null;
+}
+
+/// <summary>Результат пакетной регистрации: суммарное число лиц + итоги по каждому файлу.</summary>
+public sealed record EnrollByNameResult(int FacesAdded, IReadOnlyList<EnrollFileOutcome> Files)
+{
+    public IReadOnlyList<EnrollFileOutcome> SkippedFiles => Files.Where(f => f.Skipped).ToList();
+}
+
 /// <summary>
 /// Use-case: регистрация лиц в хранилище известных — по имени (пакет файлов)
 /// или для конкретного изображения с повторной идентификацией и
@@ -21,11 +33,14 @@ public sealed class AddToKnownResult
 /// </summary>
 public interface IFaceEnrollmentService
 {
+    /// <summary>Последнее имя, использованное при регистрации (держится в памяти сессии, общее для всех диалогов).</summary>
+    string LastEnrolledName { get; }
+
     /// <summary>Отсортированный список известных имён (хранилище + дополнительные, если заданы).</summary>
     List<string> GetExistingNames(IReadOnlyList<string>? extraNames = null);
 
-    /// <summary>Регистрирует все лица из файлов под заданным именем. Возвращает число зарегистрированных.</summary>
-    int EnrollByName(string name, IReadOnlyList<string> imagePaths, IProgress<int>? progress = null);
+    /// <summary>Регистрирует все лица из файлов под заданным именем; возвращает итоги по каждому файлу.</summary>
+    EnrollByNameResult EnrollByName(string name, IReadOnlyList<string> imagePaths, IProgress<int>? progress = null);
 
     AddToKnownResult AddToKnown(AddToKnownRequest request);
 }

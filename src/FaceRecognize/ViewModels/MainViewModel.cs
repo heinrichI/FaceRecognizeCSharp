@@ -180,19 +180,38 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task AddKnownFace()
     {
-        if (string.IsNullOrWhiteSpace(NewFaceName))
-        {
-            StatusMessage = "Enter a name for the face.";
-            return;
-        }
-
+        // 1) Сразу открываем выбор изображений — вопрос «где указывать файлы» снимается.
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
+            Title = "Select images with face(s)",
             Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.webp|All files|*.*",
             Multiselect = true
         };
 
-        if (dialog.ShowDialog() != true) return;
+        if (dialog.ShowDialog() != true)
+        {
+            StatusMessage = "Add Face cancelled: no files selected.";
+            return;
+        }
+
+        // 2) Имя: из поля, если введено; иначе — отдельный диалог со списком известных имён.
+        var name = NewFaceName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = Views.InputDialog.ShowDialog(
+                       "Add New Face",
+                       "Enter or select the person's name:",
+                       _enrollmentService.GetExistingNames(),
+                       _enrollmentService.LastEnrolledName)
+                   ?? string.Empty;
+            name = name.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            StatusMessage = "Cancelled: name not entered.";
+            return;
+        }
 
         IsProcessing = true;
         ProgressVisible = Visibility.Visible;
@@ -202,13 +221,35 @@ public partial class MainViewModel : ObservableObject, IDisposable
         try
         {
             var paths = dialog.FileNames.ToList();
-            int added = await Task.Run(() =>
-                _enrollmentService.EnrollByName(NewFaceName, paths, new Progress<int>(v => ProgressValue = v)));
+            var result = await Task.Run(() =>
+                _enrollmentService.EnrollByName(name, paths, new Progress<int>(v => ProgressValue = v)));
 
             KnownFaceCount = _vectorStore.Count;
-            StatusMessage = $"Added {added} face(s) for '{NewFaceName}'.";
             NewFaceName = string.Empty;
             RefreshKnownFaces();
+
+            var skipped = result.SkippedFiles;
+            if (result.FacesAdded == 0)
+            {
+                var details = string.Join("\n",
+                    result.Files.Select(f => $"• {Path.GetFileName(f.Path)}: {f.Error}"));
+                MessageBox.Show(
+                    $"No faces were added.\n\n{details}",
+                    "Add Face",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else if (skipped.Count > 0)
+            {
+                var summary = string.Join(", ",
+                        skipped.Take(3).Select(f => $"{Path.GetFileName(f.Path)} ({f.Error})"))
+                    + (skipped.Count > 3 ? $", +{skipped.Count - 3} more" : string.Empty);
+                StatusMessage = $"Added {result.FacesAdded} face(s) for '{name}'; skipped: {summary}.";
+            }
+            else
+            {
+                StatusMessage = $"Added {result.FacesAdded} face(s) for '{name}'.";
+            }
         }
         catch (Exception ex)
         {
@@ -324,6 +365,14 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         Debug.Assert(KnownFaces.Count == _vectorStore.Count, "Known faces view out of sync with store");
+    }
+
+    /// <summary>Перечитывает БД с диска и обновляет список (для изменений извне во время работы).</summary>
+    public void RefreshFromDisk()
+    {
+        _vectorStore.Reload();
+        KnownFaceCount = _vectorStore.Count;
+        RefreshKnownFaces();
     }
 
     [RelayCommand]

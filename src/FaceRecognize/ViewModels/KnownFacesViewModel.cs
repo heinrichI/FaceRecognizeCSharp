@@ -21,6 +21,9 @@ public partial class KnownFacesViewModel : ObservableObject
     [RelayCommand]
     private void Refresh()
     {
+        // Настоящий refresh: перечитываем файл БД, а не только в-памяти снапшот.
+        _vectorStore.Reload();
+
         var allFaces = _vectorStore.GetAll();
         var grouped = allFaces
             .GroupBy(f => f.Name)

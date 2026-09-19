@@ -12,7 +12,6 @@ public partial class ResultsViewModel : ObservableObject
     private readonly IFaceEnrollmentService _enrollmentService;
     private readonly float _distanceThreshold;
     private readonly List<RecognizedFaceViewModel> _allKnownFaces = [];
-    private string? _lastAddedName;
 
     [ObservableProperty] private int _totalImagesScanned;
     [ObservableProperty] private int _totalFacesFound;
@@ -131,7 +130,7 @@ public partial class ResultsViewModel : ObservableObject
             "Add to Known Faces",
             "Enter or select name for this face:",
             existingNames,
-            _lastAddedName ?? string.Empty);
+            _enrollmentService.LastEnrolledName);
 
         if (string.IsNullOrWhiteSpace(name)) return;
 
@@ -151,9 +150,6 @@ public partial class ResultsViewModel : ObservableObject
 
             var response = _enrollmentService.AddToKnown(
                 new AddToKnownRequest(imagePath, name, _distanceThreshold, currentUnknownFaces));
-
-            // Имя запоминается только после успешной регистрации в use-case.
-            _lastAddedName = name;
 
             // Кликнутое лицо становится известным
             _allKnownFaces.Add(new RecognizedFaceViewModel

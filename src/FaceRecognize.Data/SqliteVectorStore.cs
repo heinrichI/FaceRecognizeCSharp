@@ -59,13 +59,29 @@ public class SqliteVectorStore : IVectorStore
 
     private void LoadAll()
     {
+        _faces.AddRange(ReadAllFromDb());
+    }
+
+    public void Reload()
+    {
+        var fresh = ReadAllFromDb();
+        lock (_lock)
+        {
+            _faces.Clear();
+            _faces.AddRange(fresh);
+        }
+    }
+
+    private List<KnownFace> ReadAllFromDb()
+    {
+        var result = new List<KnownFace>();
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = "SELECT id, name, image_path, created_at, embedding, thumbnail FROM known_faces";
 
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            var face = new KnownFace
+            result.Add(new KnownFace
             {
                 Id = Guid.Parse(reader.GetString(0)),
                 Name = reader.GetString(1),
@@ -73,9 +89,10 @@ public class SqliteVectorStore : IVectorStore
                 CreatedAt = DateTime.Parse(reader.GetString(3)),
                 Embedding = BytesToFloats(reader.GetFieldValue<byte[]>(4)),
                 Thumbnail = reader.IsDBNull(5) ? null : reader.GetFieldValue<byte[]>(5)
-            };
-            _faces.Add(face);
+            });
         }
+
+        return result;
     }
 
     public void Add(KnownFace face)
