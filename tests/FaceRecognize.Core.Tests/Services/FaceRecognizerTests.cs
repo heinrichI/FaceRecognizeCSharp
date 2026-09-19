@@ -1,3 +1,4 @@
+using FaceRecognize.Abstractions;
 using FaceRecognize.Core.Services;
 using Xunit;
 
@@ -63,7 +64,7 @@ public class FaceRecognizerTests : IDisposable
 
         if (emb1 == null || emb2 == null) return;
 
-        var distance = FaceRecognizer.CosineDistance(emb1, emb2);
+        var distance = EmbeddingMath.CosineDistance(emb1, emb2);
         Assert.True(distance < 0.8f, $"Same person distance too high: {distance:F4}");
     }
 
@@ -93,7 +94,7 @@ public class FaceRecognizerTests : IDisposable
 
         if (emb1 == null || emb2 == null) return;
 
-        var distance = FaceRecognizer.CosineDistance(emb1, emb2);
+        var distance = EmbeddingMath.CosineDistance(emb1, emb2);
         Assert.True(distance > 0.2f, $"Different person distance too low: {distance:F4}");
     }
 

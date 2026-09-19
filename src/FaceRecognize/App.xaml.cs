@@ -21,16 +21,14 @@ public partial class App : Application
         var dbPath = Path.Combine(basePath, "faces.db");
         var configPath = Path.Combine(basePath, "config.json");
 
-        // Load config first to get ModelsDirectory
-        var config = new JsonConfiguration(configPath);
-
-        var modelPath = !string.IsNullOrEmpty(config.ModelsDirectory)
-            ? Path.Combine(config.ModelsDirectory, "lm_model3_opt.onnx")
-            : Path.Combine(basePath, "Models", "lm_model3_opt.onnx");
+        // Единственный экземпляр конфигурации: контейнер — единый источник правды.
+        var configuration = new JsonConfiguration(configPath);
+        var modelPath = ModelPathResolver.Resolve(configuration.ModelsDirectory, basePath);
 
         var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
         services.AddFaceRecognition(File.Exists(modelPath) ? modelPath : null);
-        services.AddData(dbPath, configPath);
+        services.AddData(dbPath);
         services.AddSingleton<MainViewModel>();
 
         ServiceProvider = services.BuildServiceProvider();
@@ -40,5 +38,13 @@ public partial class App : Application
             DataContext = ServiceProvider.GetRequiredService<MainViewModel>()
         };
         mainWindow.Show();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        // Контейнер владеет жизненным циклом синглтонов (store, cache, recognizer)
+        // и закрывает их SQLite-соединения при выходе.
+        (ServiceProvider as IDisposable)?.Dispose();
+        base.OnExit(e);
     }
 }

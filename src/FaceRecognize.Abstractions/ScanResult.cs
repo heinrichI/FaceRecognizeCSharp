@@ -1,7 +1,5 @@
 namespace FaceRecognize.Abstractions;
 
-public enum DisplayMode { All, KnownOnly, UnknownOnly }
-
 public class ScanResult
 {
     public List<RecognizedFace> KnownFaces { get; set; } = [];
@@ -9,6 +7,9 @@ public class ScanResult
     public int TotalImagesScanned { get; set; }
     public int TotalFacesFound { get; set; }
     public TimeSpan Duration { get; set; }
+
+    /// <summary>True, если сканирование было остановлено пользователем (результат частичный).</summary>
+    public bool Cancelled { get; set; }
 }
 
 public class RecognizedFace

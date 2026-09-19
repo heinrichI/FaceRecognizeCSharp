@@ -5,7 +5,7 @@ public interface IVectorStore : IDisposable
     void Add(KnownFace face);
     void Delete(Guid id);
     void ClearAll();
-    (KnownFace? best, float score) Search(float[] embedding, float threshold = 0.58f);
+    (KnownFace? best, float score) Search(float[] embedding, float threshold);
     int Count { get; }
     List<KnownFace> GetAll();
 }

@@ -114,7 +114,7 @@ public class ClusteringService : IClusteringService
             {
                 if (j == i) continue;
                 hasNeighbor = labels[j] == labels[i]
-                               && 1f - FaceRecognizer.DotProduct(embeddings[i], embeddings[j]) <= eps;
+                               && 1f - EmbeddingMath.DotProduct(embeddings[i], embeddings[j]) <= eps;
             }
 
             bool isCore = RangeQuery(embeddings, i, eps).Count >= minSamples;
@@ -132,7 +132,7 @@ public class ClusteringService : IClusteringService
 
         for (int i = 0; i < embeddings.Count; i++)
         {
-            var dist = FaceRecognizer.CosineDistance(query, embeddings[i]);
+            var dist = EmbeddingMath.CosineDistance(query, embeddings[i]);
             if (dist <= eps)
                 result.Add(i);
         }

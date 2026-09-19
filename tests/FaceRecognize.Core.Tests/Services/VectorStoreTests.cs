@@ -33,7 +33,7 @@ public class VectorStoreTests : IDisposable
         _store!.Add(CreateTestFace("Alice", embedding1));
         _store.Add(CreateTestFace("Bob", embedding2));
 
-        var (best, score) = _store.Search(embedding1);
+        var (best, score) = _store.Search(embedding1, 0.5f);
 
         Assert.NotNull(best);
         Assert.Equal("Alice", best!.Name);
@@ -102,6 +102,14 @@ public class VectorStoreTests : IDisposable
         var embedding = new float[512];
         for (int i = 0; i < 512; i++)
             embedding[i] = (float)rng.NextDouble();
+
+        // L2-нормализация: фикстуры соблюдают контракт пайплайна распознавания
+        // (см. EmbeddingMath.AssertNormalized).
+        float norm = MathF.Sqrt(embedding.Sum(x => x * x));
+        if (norm > 0f)
+            for (int i = 0; i < embedding.Length; i++)
+                embedding[i] /= norm;
+
         return embedding;
     }
 

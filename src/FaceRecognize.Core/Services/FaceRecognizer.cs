@@ -39,9 +39,9 @@ public class FaceRecognizer : IFaceRecognizer
         var faces = _detector.DetectFaces(img);
         return faces.Select(f => new FaceDetectionResult
         {
-            Box = f.Box,
+            Box = new FaceBox(f.Box.X, f.Box.Y, f.Box.Width, f.Box.Height),
             Confidence = f.Confidence,
-            Landmarks = f.Landmarks
+            Landmarks = f.Landmarks?.Select(p => (p.X, p.Y)).ToList()
         }).ToList();
     }
 
@@ -58,7 +58,7 @@ public class FaceRecognizer : IFaceRecognizer
         {
             try
             {
-                return ExtractEmbedding3D(imagePath, face.Box);
+                return ExtractEmbedding3D(imagePath, ToFaceBox(face.Box));
             }
             catch
             {
@@ -87,7 +87,7 @@ public class FaceRecognizer : IFaceRecognizer
             {
                 try
                 {
-                    embedding = ExtractEmbedding3D(imagePath, face.Box);
+                    embedding = ExtractEmbedding3D(imagePath, ToFaceBox(face.Box));
                 }
                 catch
                 {
@@ -106,7 +106,7 @@ public class FaceRecognizer : IFaceRecognizer
 
             results.Add(new FaceWithEmbedding
             {
-                Box = face.Box,
+                Box = new FaceBox(face.Box.X, face.Box.Y, face.Box.Width, face.Box.Height),
                 Confidence = face.Confidence,
                 Embedding = embedding
             });
@@ -116,33 +116,7 @@ public class FaceRecognizer : IFaceRecognizer
         return results;
     }
 
-    public HeadPose? GetHeadPose(string imagePath)
-    {
-        if (_alignment3D == null)
-            return null;
-
-        using var sourceMat = Cv2.ImRead(imagePath);
-        if (sourceMat.Empty())
-            return null;
-
-        var img = Image.Load<Rgb24>(imagePath);
-        var faces = _detector.DetectFaces(img);
-        img.Dispose();
-        if (faces.Count == 0)
-            return null;
-
-        var face = faces.First();
-        var bbox = new Rect(
-            (int)face.Box.X,
-            (int)face.Box.Y,
-            (int)face.Box.Width,
-            (int)face.Box.Height);
-
-        bbox = ClampRect(bbox, sourceMat.Width, sourceMat.Height);
-        return _alignment3D.EstimateHeadPose(sourceMat, bbox);
-    }
-
-    private float[] ExtractEmbedding3D(string imagePath, RectangleF box)
+    private float[] ExtractEmbedding3D(string imagePath, FaceBox box)
     {
         using var sourceMat = Cv2.ImRead(imagePath);
         var bbox = new Rect(
@@ -175,17 +149,8 @@ public class FaceRecognizer : IFaceRecognizer
         return rect;
     }
 
-    public static float DotProduct(float[] a, float[] b)
-    {
-        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
-        return a.Dot(b);
-    }
-
-    public static float CosineDistance(float[] a, float[] b)
-    {
-        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
-        return 1f - a.Dot(b);
-    }
+    private static FaceBox ToFaceBox(SixLabors.ImageSharp.RectangleF box)
+        => new(box.X, box.Y, box.Width, box.Height);
 
     public void Dispose()
     {

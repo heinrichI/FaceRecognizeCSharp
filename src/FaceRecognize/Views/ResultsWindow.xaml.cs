@@ -6,9 +6,9 @@ namespace FaceRecognize.Views;
 
 public partial class ResultsWindow : Window
 {
-    public ResultsWindow(ScanResult result, IVectorStore vectorStore, IFaceRecognizer recognizer, IClusteringService clusteringService)
+    public ResultsWindow(ScanResult result, IFaceEnrollmentService enrollmentService, float distanceThreshold)
     {
         InitializeComponent();
-        DataContext = new ResultsViewModel(result, vectorStore, recognizer, clusteringService);
+        DataContext = new ResultsViewModel(result, enrollmentService, distanceThreshold);
     }
 }

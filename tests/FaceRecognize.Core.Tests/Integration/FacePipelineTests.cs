@@ -42,7 +42,7 @@ public class FacePipelineTests : IDisposable
         }
 
         var queryEmbedding = _recognizer.ExtractEmbedding(images[3]);
-        var (best, score) = _vectorStore!.Search(queryEmbedding);
+        var (best, score) = _vectorStore!.Search(queryEmbedding, 0.5f);
 
         Assert.NotNull(best);
         Assert.Equal("Scarlett Johansson", best!.Name);
@@ -77,7 +77,7 @@ public class FacePipelineTests : IDisposable
             var faces = _recognizer.ExtractAllFaces(images[i]);
             foreach (var face in faces)
             {
-                var (best, _) = _vectorStore!.Search(face.Embedding);
+                var (best, _) = _vectorStore!.Search(face.Embedding, 0.5f);
                 if (best?.Name == "Scarlett Johansson")
                     recognized++;
             }
@@ -115,7 +115,7 @@ public class FacePipelineTests : IDisposable
                 var faces = _recognizer.ExtractAllFaces(img);
                 foreach (var face in faces)
                 {
-                    var (best, _) = _vectorStore.Search(face.Embedding);
+                    var (best, _) = _vectorStore.Search(face.Embedding, 0.5f);
                     if (best == null)
                         unknownEmbeddings.Add((img, face.Embedding, null));
                 }

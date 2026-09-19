@@ -7,7 +7,7 @@ using OpenCvSharp;
 
 namespace FaceRecognize.Core.Services;
 
-public class ThreeDAlignmentService : IDisposable
+internal class ThreeDAlignmentService : IDisposable
 {
     private readonly InferenceSession _landmarkSession;
 
@@ -118,55 +118,6 @@ public class ThreeDAlignmentService : IDisposable
         Cv2.WarpPerspective(source, frontalized, warpMat, new Size(112, 112));
 
         return frontalized;
-    }
-
-    public HeadPose EstimateHeadPose(Mat source, Rect bbox)
-    {
-        var landmarks = DetectLandmarks(source, bbox);
-        if (landmarks == null)
-            return new HeadPose();
-
-        var cameraMatrix = BuildCameraMatrix(source.Width, source.Height);
-        var distCoeffs = new Mat();
-        var rvec = new Mat();
-        var tvec = new Mat();
-
-        var modelPts = new Point3f[ContourPoints.Length];
-        var imagePts = new Point2f[ContourPoints.Length];
-        for (int i = 0; i < ContourPoints.Length; i++)
-        {
-            int idx = ContourPoints[i];
-            modelPts[i] = new Point3f(
-                FaceModel3D[idx][0] * 100,
-                FaceModel3D[idx][1] * 100,
-                FaceModel3D[idx][2] * 100);
-            imagePts[i] = new Point2f(landmarks[idx, 0], landmarks[idx, 1]);
-        }
-
-        Cv2.SolvePnP(
-            InputArray.Create(modelPts),
-            InputArray.Create(imagePts),
-            cameraMatrix, distCoeffs,
-            OutputArray.Create(rvec),
-            OutputArray.Create(tvec),
-            false,
-            SolvePnPMethod.Iterative);
-
-        var rmat = new Mat();
-        Cv2.Rodrigues(rvec, OutputArray.Create(rmat));
-
-        double pitch = Math.Atan2(-rmat.At<double>(2, 0),
-            Math.Sqrt(rmat.At<double>(2, 1) * rmat.At<double>(2, 1) +
-                      rmat.At<double>(2, 2) * rmat.At<double>(2, 2)));
-        double yaw = Math.Atan2(rmat.At<double>(1, 0), rmat.At<double>(0, 0));
-        double roll = Math.Atan2(rmat.At<double>(2, 1), rmat.At<double>(2, 2));
-
-        return new HeadPose
-        {
-            Yaw = yaw * 180.0 / Math.PI,
-            Pitch = pitch * 180.0 / Math.PI,
-            Roll = roll * 180.0 / Math.PI
-        };
     }
 
     private float[,]? DetectLandmarks(Mat source, Rect bbox)

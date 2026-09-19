@@ -12,5 +12,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFaceRecognizer>(sp => new FaceRecognizer(landmarkOnnxPath));
         services.AddSingleton<IClusteringService, ClusteringService>();
         services.AddSingleton<IImageScanner, ImageScanner>();
+        services.AddSingleton<IFaceScanService, FaceScanService>();
+        services.AddSingleton<IFaceEnrollmentService, FaceEnrollmentService>();
     }
 }

@@ -84,6 +84,7 @@ public class SqliteVectorStore : IVectorStore
         Debug.Assert(!string.IsNullOrWhiteSpace(face.ImagePath), "KnownFace.ImagePath must not be empty");
         Debug.Assert(face.Id != Guid.Empty, "KnownFace.Id must not be Guid.Empty");
         Debug.Assert(face.Embedding is { Length: > 0 }, "KnownFace.Embedding must not be empty");
+        EmbeddingMath.AssertNormalized(face.Embedding);
 
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = """
@@ -130,7 +131,7 @@ public class SqliteVectorStore : IVectorStore
         }
     }
 
-    public (KnownFace? best, float score) Search(float[] embedding, float threshold = 0.58f)
+    public (KnownFace? best, float score) Search(float[] embedding, float threshold)
     {
         Debug.Assert(embedding is { Length: > 0 }, "Search embedding must not be empty");
         lock (_lock)
@@ -140,7 +141,7 @@ public class SqliteVectorStore : IVectorStore
 
             foreach (var face in _faces)
             {
-                var score = DotProduct(face.Embedding, embedding);
+                var score = EmbeddingMath.DotProduct(face.Embedding, embedding);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -166,15 +167,6 @@ public class SqliteVectorStore : IVectorStore
         {
             return [.. _faces];
         }
-    }
-
-    private static float DotProduct(float[] a, float[] b)
-    {
-        Debug.Assert(a.Length == b.Length, "Embedding dimensions must match");
-        float sum = 0;
-        for (int i = 0; i < a.Length; i++)
-            sum += a[i] * b[i];
-        return sum;
     }
 
     private static byte[] FloatsToBytes(float[] floats)

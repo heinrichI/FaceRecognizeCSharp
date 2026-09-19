@@ -1,19 +1,16 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FaceRecognize.Abstractions;
-using SixLabors.ImageSharp.Processing;
 
 namespace FaceRecognize.ViewModels;
 
 public partial class ResultsViewModel : ObservableObject
 {
-    private readonly IVectorStore _vectorStore;
-    private readonly IFaceRecognizer _recognizer;
-    private readonly IClusteringService _clusteringService;
+    private readonly IFaceEnrollmentService _enrollmentService;
+    private readonly float _distanceThreshold;
     private readonly List<RecognizedFaceViewModel> _allKnownFaces = [];
     private string? _lastAddedName;
 
@@ -38,11 +35,10 @@ public partial class ResultsViewModel : ObservableObject
         RefreshKnownFaces();
     }
 
-    public ResultsViewModel(ScanResult result, IVectorStore vectorStore, IFaceRecognizer recognizer, IClusteringService clusteringService)
+    public ResultsViewModel(ScanResult result, IFaceEnrollmentService enrollmentService, float distanceThreshold)
     {
-        _vectorStore = vectorStore;
-        _recognizer = recognizer;
-        _clusteringService = clusteringService;
+        _enrollmentService = enrollmentService;
+        _distanceThreshold = distanceThreshold;
 
         TotalImagesScanned = result.TotalImagesScanned;
         TotalFacesFound = result.TotalFacesFound;
@@ -122,45 +118,44 @@ public partial class ResultsViewModel : ObservableObject
     }
 
     private IEnumerable<string> GetExistingNames()
-    {
-        var fromResults = _allKnownFaces.Select(f => f.Name);
-        var fromDb = _vectorStore.GetAll().Select(f => f.Name);
-        return fromResults.Concat(fromDb).Distinct().Order();
-    }
+        => _enrollmentService.GetExistingNames(_allKnownFaces.Select(f => f.Name).ToList());
 
     [RelayCommand]
     private void AddToKnown(string? imagePath)
     {
         if (string.IsNullOrEmpty(imagePath)) return;
 
+        var existingNames = GetExistingNames();
+
         var name = Views.InputDialog.ShowDialog(
             "Add to Known Faces",
             "Enter or select name for this face:",
-            GetExistingNames(),
+            existingNames,
             _lastAddedName ?? string.Empty);
 
         if (string.IsNullOrWhiteSpace(name)) return;
 
         try
         {
-            var countBefore = _vectorStore.Count;
-            var detectedFaces = _recognizer.ExtractAllFaces(imagePath);
-            if (detectedFaces.Count == 0) return;
+            // Состояние «неизвестные лица» передаётся в use-case как DTO-снапшот;
+            // сам use-case ничего не хранит между вызовами.
+            var currentUnknownFaces = UnknownClusters
+                .SelectMany(c => c.Faces)
+                .Select(f => new ClusterFace
+                {
+                    ImagePath = f.ImagePath,
+                    Embedding = f.Embedding ?? [],
+                    Thumbnail = f.Thumbnail
+                })
+                .ToList();
 
-            var detected = detectedFaces.First();
-            var thumb = CreateFaceThumbnail(imagePath, detected.Box.X, detected.Box.Y, detected.Box.Width, detected.Box.Height, 128);
-            var face = new KnownFace
-            {
-                Name = name,
-                ImagePath = imagePath,
-                Embedding = detected.Embedding,
-                Thumbnail = thumb
-            };
-            _vectorStore.Add(face);
+            var response = _enrollmentService.AddToKnown(
+                new AddToKnownRequest(imagePath, name, _distanceThreshold, currentUnknownFaces));
+
+            // Имя запоминается только после успешной регистрации в use-case.
             _lastAddedName = name;
-            Debug.Assert(_vectorStore.Count == countBefore + 1, "Vector store count did not increase by 1 after Add");
 
-            // Add to in-memory known faces
+            // Кликнутое лицо становится известным
             _allKnownFaces.Add(new RecognizedFaceViewModel
             {
                 ImagePath = imagePath,
@@ -168,77 +163,35 @@ public partial class ResultsViewModel : ObservableObject
                 Confidence = 1.0f
             });
 
-            // Collect all remaining unknown embeddings with thumbnails
-            var remainingUnknowns = new List<(string path, float[] embedding, byte[]? thumb)>();
-            foreach (var cluster in UnknownClusters)
-            {
-                foreach (var faceInCluster in cluster.Faces)
-                {
-                    if (faceInCluster.ImagePath != imagePath && faceInCluster.Embedding != null)
-                    {
-                        remainingUnknowns.Add((faceInCluster.ImagePath, faceInCluster.Embedding, faceInCluster.Thumbnail));
-                    }
-                }
-            }
-
-            // Re-check: which of the remaining unknowns now match the updated vector store?
-            var newlyMatched = new List<(string path, string name, float score)>();
-            var stillUnknown = new List<(string path, float[] embedding, byte[]? thumb)>();
-
-            foreach (var (path, emb, faceThumb) in remainingUnknowns)
-            {
-                var (best, score) = _vectorStore.Search(emb, 0.58f);
-                if (best != null)
-                {
-                    newlyMatched.Add((path, best.Name, score));
-                }
-                else
-                {
-                    stillUnknown.Add((path, emb, faceThumb));
-                }
-            }
-
-            Debug.Assert(newlyMatched.Count + stillUnknown.Count == remainingUnknowns.Count,
-                "Every remaining unknown face must be classified exactly once");
-
-            // Add newly matched to known
-            foreach (var (path, matchedName, score) in newlyMatched)
+            // Новые совпадения среди оставшихся неизвестных
+            foreach (var matched in response.NewlyMatched)
             {
                 _allKnownFaces.Add(new RecognizedFaceViewModel
                 {
-                    ImagePath = path,
-                    Name = matchedName,
-                    Confidence = score
+                    ImagePath = matched.ImagePath,
+                    Name = matched.Name,
+                    Confidence = matched.Confidence,
+                    Thumbnail = matched.Thumbnail
                 });
             }
 
-            // Re-cluster remaining unknowns
+            // Пере-кластеризованные оставшиеся неизвестные
             UnknownClusters.Clear();
-            if (stillUnknown.Count > 0)
+            foreach (var cluster in response.RemainingClusters)
             {
-                var clusterInput = stillUnknown.Select(u => (u.path, u.embedding, u.thumb)).ToList();
-                var clusters = _clusteringService.ClusterUnknownFaces(clusterInput);
-
-                foreach (var cluster in clusters)
+                UnknownClusters.Add(new PersonClusterViewModel
                 {
-                    UnknownClusters.Add(new PersonClusterViewModel
+                    ClusterId = cluster.ClusterId,
+                    FaceCount = cluster.Faces.Count,
+                    Faces = new ObservableCollection<ClusterFaceViewModel>(cluster.Faces.Select(f => new ClusterFaceViewModel
                     {
-                        ClusterId = cluster.ClusterId,
-                        FaceCount = cluster.Faces.Count,
-                        Faces = new ObservableCollection<ClusterFaceViewModel>(cluster.Faces.Select(f => new ClusterFaceViewModel
-                        {
-                            ImagePath = f.ImagePath,
-                            Embedding = f.Embedding,
-                            Thumbnail = f.Thumbnail
-                        }))
-                    });
-                }
+                        ImagePath = f.ImagePath,
+                        Embedding = f.Embedding,
+                        Thumbnail = f.Thumbnail
+                    }))
+                });
             }
 
-            Debug.Assert(UnknownClusters.Sum(c => c.FaceCount) == stillUnknown.Count,
-                "Re-clustering lost or duplicated faces");
-
-            // Update names list and refresh
             RefreshKnownPeopleNames();
             RefreshKnownFaces();
             Debug.Assert(KnownPeopleNames.Any(n => n.Name == name), "Added name missing from people list");
@@ -274,58 +227,6 @@ public partial class ResultsViewModel : ObservableObject
         catch (Exception ex)
         {
             MessageBox.Show($"Cannot open image: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private static byte[]? CreateThumbnail(string imagePath, int maxSize)
-    {
-        try
-        {
-            using var original = SixLabors.ImageSharp.Image.Load(imagePath);
-            original.Mutate(x => x.Resize(new SixLabors.ImageSharp.Processing.ResizeOptions
-            {
-                Size = new SixLabors.ImageSharp.Size(maxSize, maxSize),
-                Mode = SixLabors.ImageSharp.Processing.ResizeMode.Crop
-            }));
-
-            using var ms = new MemoryStream();
-            original.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
-            return ms.ToArray();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static byte[]? CreateFaceThumbnail(string imagePath, float x, float y, float width, float height, int outputSize)
-    {
-        try
-        {
-            using var original = SixLabors.ImageSharp.Image.Load(imagePath);
-
-            var borderX = (int)(width * 0.3f);
-            var borderY = (int)(height * 0.3f);
-
-            int cropX = Math.Max(0, (int)x - borderX);
-            int cropY = Math.Max(0, (int)y - borderY);
-            int cropW = Math.Min(original.Width - cropX, (int)width + borderX * 2);
-            int cropH = Math.Min(original.Height - cropY, (int)height + borderY * 2);
-
-            original.Mutate(ctx => ctx.Crop(new SixLabors.ImageSharp.Rectangle(cropX, cropY, cropW, cropH)));
-            original.Mutate(ctx => ctx.Resize(new SixLabors.ImageSharp.Processing.ResizeOptions
-            {
-                Size = new SixLabors.ImageSharp.Size(outputSize, outputSize),
-                Mode = SixLabors.ImageSharp.Processing.ResizeMode.Crop
-            }));
-
-            using var ms = new MemoryStream();
-            original.Save(ms, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder());
-            return ms.ToArray();
-        }
-        catch
-        {
-            return null;
         }
     }
 }

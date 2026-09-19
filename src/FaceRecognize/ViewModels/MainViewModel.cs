@@ -6,9 +6,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FaceRecognize.Abstractions;
-using SixLabors.ImageSharp.Formats;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using FaceRecognize.Data;
 
 namespace FaceRecognize.ViewModels;
 
@@ -16,12 +14,12 @@ public partial class MainViewModel : ObservableObject, IDisposable
 {
     private readonly IFaceRecognizer _recognizer;
     private readonly IVectorStore _vectorStore;
-    private readonly IClusteringService _clusteringService;
-    private readonly IImageScanner _imageScanner;
     private readonly IConfiguration _configuration;
     private readonly IDatabaseMaintenanceService _maintenanceService;
     private readonly IEmbeddingCache _embeddingCache;
     private readonly IModelDownloader _modelDownloader;
+    private readonly IFaceScanService _faceScanService;
+    private readonly IFaceEnrollmentService _enrollmentService;
     private CancellationTokenSource? _scanCts;
 
     [ObservableProperty] private string _statusMessage = "Ready";
@@ -47,21 +45,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
     public MainViewModel(
         IFaceRecognizer recognizer,
         IVectorStore vectorStore,
-        IClusteringService clusteringService,
-        IImageScanner imageScanner,
         IConfiguration configuration,
         IDatabaseMaintenanceService maintenanceService,
         IEmbeddingCache embeddingCache,
-        IModelDownloader modelDownloader)
+        IModelDownloader modelDownloader,
+        IFaceScanService faceScanService,
+        IFaceEnrollmentService enrollmentService)
     {
         _recognizer = recognizer;
         _vectorStore = vectorStore;
-        _clusteringService = clusteringService;
-        _imageScanner = imageScanner;
         _configuration = configuration;
         _maintenanceService = maintenanceService;
         _embeddingCache = embeddingCache;
         _modelDownloader = modelDownloader;
+        _faceScanService = faceScanService;
+        _enrollmentService = enrollmentService;
 
         // Load saved config
         ModelsDirectory = _configuration.ModelsDirectory;
@@ -77,11 +75,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private string GetModelPath()
-    {
-        return !string.IsNullOrEmpty(ModelsDirectory)
-            ? Path.Combine(ModelsDirectory, "lm_model3_opt.onnx")
-            : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "lm_model3_opt.onnx");
-    }
+        => ModelPathResolver.Resolve(ModelsDirectory, AppDomain.CurrentDomain.BaseDirectory);
 
     private const string ModelDownloadUrl = "https://github.com/AlfredoRamos/FaceRecognition/raw/main/models/lm_model3_opt.onnx";
 
@@ -157,10 +151,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
-            var modelPath = !string.IsNullOrEmpty(ModelsDirectory)
-                ? Path.Combine(ModelsDirectory, "lm_model3_opt.onnx")
-                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Models", "lm_model3_opt.onnx");
-
+            var modelPath = GetModelPath();
             if (File.Exists(modelPath))
                 AlignmentStatus = "3D: Model found but not loaded (restart required)";
             else
@@ -187,7 +178,7 @@ public partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void AddKnownFace()
+    private async Task AddKnownFace()
     {
         if (string.IsNullOrWhiteSpace(NewFaceName))
         {
@@ -210,28 +201,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            int added = 0;
-            foreach (var path in dialog.FileNames)
-            {
-                ProgressText = Path.GetFileName(path);
-                ProgressValue = added + 1;
-
-                var faces = _recognizer.ExtractAllFaces(path);
-                foreach (var face in faces)
-                {
-                    Debug.Assert(face.Embedding is { Length: > 0 }, "Face embedding must not be empty");
-                    var thumb = CreateFaceThumbnail(path, face.Box.X, face.Box.Y, face.Box.Width, face.Box.Height, 128);
-                    var knownFace = new KnownFace
-                    {
-                        Name = NewFaceName,
-                        ImagePath = path,
-                        Embedding = face.Embedding,
-                        Thumbnail = thumb
-                    };
-                    _vectorStore.Add(knownFace);
-                    added++;
-                }
-            }
+            var paths = dialog.FileNames.ToList();
+            int added = await Task.Run(() =>
+                _enrollmentService.EnrollByName(NewFaceName, paths, new Progress<int>(v => ProgressValue = v)));
 
             KnownFaceCount = _vectorStore.Count;
             StatusMessage = $"Added {added} face(s) for '{NewFaceName}'.";
@@ -265,139 +237,41 @@ public partial class MainViewModel : ObservableObject, IDisposable
         }
 
         Debug.Assert(Directory.Exists(ScanDirectoryPath), "Scan directory must exist");
+        Debug.Assert(ThreadCount >= 1, "ThreadCount must be >= 1");
+
         _scanCts = new CancellationTokenSource();
         var token = _scanCts.Token;
         IsProcessing = true;
         ProgressVisible = Visibility.Visible;
+        ProgressValue = 0;
         StatusMessage = "Scanning directory...";
+
+        // Создаётся в UI-контексте: Progress<T> сам постит обновления в UI-поток.
+        var progress = new Progress<ScanProgress>(p =>
+        {
+            ProgressMaximum = p.Total;
+            ProgressValue = p.Completed;
+            ProgressText = p.FileName;
+        });
 
         try
         {
-            var images = _imageScanner.ScanDirectory(ScanDirectoryPath);
-            ProgressMaximum = images.Count;
-            ProgressValue = 0;
-            StatusMessage = $"Found {images.Count} images. Processing...";
-
-            var results = new List<RecognizedFace>();
-            var unknownEmbeddings = new List<(string path, float[] embedding, byte[]? thumb)>();
-            int faceCount = 0;
-            int processed = 0;
-            var lockObj = new object();
-            bool cancelled = false;
-
-            Debug.Assert(ThreadCount >= 1, "ThreadCount must be >= 1 for ParallelOptions");
             var threshold = (float)DistanceThreshold;
+            var scanResult = await Task.Run(
+                () => _faceScanService.ScanDirectory(ScanDirectoryPath, threshold, ThreadCount, progress, token),
+                token);
 
-            var parallelOptions = new ParallelOptions
-            {
-                MaxDegreeOfParallelism = ThreadCount,
-                CancellationToken = token
-            };
+            StatusMessage = (scanResult.Cancelled ? "Stopped" : "Done")
+                + $": {scanResult.KnownFaces.Count} known, "
+                + $"{scanResult.UnknownClusters.Sum(c => c.Faces.Count)} unknown "
+                + $"in {scanResult.TotalFacesFound} faces.";
 
-            try
-            {
-                await Task.Run(() =>
-                {
-                    Parallel.ForEach(images, parallelOptions, imgPath =>
-                    {
-                        var current = Interlocked.Increment(ref processed);
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            ProgressValue = current;
-                            ProgressText = Path.GetFileName(imgPath);
-                        });
-
-                        try
-                        {
-                            var fileInfo = new FileInfo(imgPath);
-                            var fileSize = fileInfo.Length;
-                            var lastModified = fileInfo.LastWriteTimeUtc;
-
-                            var cachedFaces = _embeddingCache.GetCachedFaces(imgPath, fileSize, lastModified);
-                            CachedFace[] faceArray;
-
-                            if (cachedFaces != null)
-                            {
-                                faceArray = cachedFaces.ToArray();
-                            }
-                            else
-                            {
-                                var detected = _recognizer.ExtractAllFaces(imgPath);
-                                faceArray = detected.Select(f => new CachedFace
-                                {
-                                    Embedding = f.Embedding,
-                                    X = f.Box.X,
-                                    Y = f.Box.Y,
-                                    Width = f.Box.Width,
-                                    Height = f.Box.Height
-                                }).ToArray();
-                                if (faceArray.Length > 0)
-                                    _embeddingCache.Store(imgPath, fileSize, lastModified, faceArray.ToList());
-                            }
-
-                            foreach (var cachedFace in faceArray)
-                            {
-                                var (best, score) = _vectorStore.Search(cachedFace.Embedding, threshold);
-
-                                if (best != null)
-                                {
-                                    var thumb = CreateFaceThumbnail(imgPath, cachedFace.X, cachedFace.Y, cachedFace.Width, cachedFace.Height, 128);
-                                    lock (lockObj)
-                                    {
-                                        results.Add(new RecognizedFace
-                                        {
-                                            ImagePath = imgPath,
-                                            Name = best.Name,
-                                            Confidence = score,
-                                            Thumbnail = thumb
-                                        });
-                                        Interlocked.Increment(ref faceCount);
-                                    }
-                                }
-                                else
-                                {
-                                    var thumb = CreateFaceThumbnail(imgPath, cachedFace.X, cachedFace.Y, cachedFace.Width, cachedFace.Height, 128);
-                                    lock (lockObj)
-                                    {
-                                        unknownEmbeddings.Add((imgPath, cachedFace.Embedding, thumb));
-                                        Interlocked.Increment(ref faceCount);
-                                    }
-                                }
-                            }
-                        }
-                        catch
-                        {
-                            // Skip unprocessable images
-                        }
-                    });
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                cancelled = true;
-            }
-
-            Debug.Assert(faceCount == results.Count + unknownEmbeddings.Count, "Face count conservation violated during scan");
-            Debug.Assert(results.All(r => r.Confidence >= threshold), "Known face result below match threshold");
-            if (!cancelled)
-                Debug.Assert(processed == images.Count, "Not all images were processed");
-
-            var clusters = _clusteringService.ClusterUnknownFaces(unknownEmbeddings);
-
-            var scanResult = new ScanResult
-            {
-                KnownFaces = results,
-                UnknownClusters = clusters,
-                TotalImagesScanned = processed,
-                TotalFacesFound = faceCount
-            };
-
-            StatusMessage = cancelled
-                ? $"Stopped: {results.Count} known, {unknownEmbeddings.Count} unknown in {faceCount} faces."
-                : $"Done: {results.Count} known, {unknownEmbeddings.Count} unknown in {faceCount} faces.";
-
-            var resultsWindow = new Views.ResultsWindow(scanResult, _vectorStore, _recognizer, _clusteringService);
+            var resultsWindow = new Views.ResultsWindow(scanResult, _enrollmentService, threshold);
             resultsWindow.Show();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "Scan stopped.";
         }
         catch (Exception ex)
         {
@@ -452,59 +326,6 @@ public partial class MainViewModel : ObservableObject, IDisposable
         Debug.Assert(KnownFaces.Count == _vectorStore.Count, "Known faces view out of sync with store");
     }
 
-    private static byte[]? CreateThumbnail(string imagePath, int maxSize)
-    {
-        try
-        {
-            using var original = SixLabors.ImageSharp.Image.Load(imagePath);
-            original.Mutate(x => x.Resize(new ResizeOptions
-            {
-                Size = new SixLabors.ImageSharp.Size(maxSize, maxSize),
-                Mode = SixLabors.ImageSharp.Processing.ResizeMode.Crop
-            }));
-
-            using var ms = new MemoryStream();
-            original.Save(ms, new JpegEncoder());
-            return ms.ToArray();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static byte[]? CreateFaceThumbnail(string imagePath, float x, float y, float width, float height, int outputSize)
-    {
-        try
-        {
-            using var original = SixLabors.ImageSharp.Image.Load(imagePath);
-
-            // Add 30% border around face for context
-            var borderX = (int)(width * 0.3f);
-            var borderY = (int)(height * 0.3f);
-
-            int cropX = Math.Max(0, (int)x - borderX);
-            int cropY = Math.Max(0, (int)y - borderY);
-            int cropW = Math.Min(original.Width - cropX, (int)width + borderX * 2);
-            int cropH = Math.Min(original.Height - cropY, (int)height + borderY * 2);
-
-            original.Mutate(ctx => ctx.Crop(new SixLabors.ImageSharp.Rectangle(cropX, cropY, cropW, cropH)));
-            original.Mutate(ctx => ctx.Resize(new ResizeOptions
-            {
-                Size = new SixLabors.ImageSharp.Size(outputSize, outputSize),
-                Mode = SixLabors.ImageSharp.Processing.ResizeMode.Crop
-            }));
-
-            using var ms = new MemoryStream();
-            original.Save(ms, new JpegEncoder());
-            return ms.ToArray();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     [RelayCommand]
     private void ShowKnownFaces()
     {
@@ -543,11 +364,13 @@ public partial class MainViewModel : ObservableObject, IDisposable
         StatusMessage = $"Removed {removed} orphaned entries.";
     }
 
+    /// <summary>
+    /// Конфигурация сохраняется; синглтоны (recognizer, store, cache)
+    /// разворачивает контейнер в App.OnExit — не разворачиваем их здесь.
+    /// </summary>
     public void Dispose()
     {
         SaveConfig();
-        _recognizer.Dispose();
-        _vectorStore.Dispose();
     }
 }
 
