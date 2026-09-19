@@ -17,7 +17,13 @@ public partial class InputDialog : Window
         NameComboBox.ItemsSource = sorted;
 
         if (!string.IsNullOrEmpty(defaultValue))
-            NameComboBox.Text = defaultValue;
+        {
+            var index = sorted.IndexOf(defaultValue);
+            if (index >= 0)
+                NameComboBox.SelectedIndex = index;
+            else
+                NameComboBox.Text = defaultValue;
+        }
         else if (sorted.Count > 0)
             NameComboBox.SelectedIndex = 0;
 

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,6 +15,7 @@ public partial class ResultsViewModel : ObservableObject
     private readonly IFaceRecognizer _recognizer;
     private readonly IClusteringService _clusteringService;
     private readonly List<RecognizedFaceViewModel> _allKnownFaces = [];
+    private string? _lastAddedName;
 
     [ObservableProperty] private int _totalImagesScanned;
     [ObservableProperty] private int _totalFacesFound;
@@ -134,12 +136,14 @@ public partial class ResultsViewModel : ObservableObject
         var name = Views.InputDialog.ShowDialog(
             "Add to Known Faces",
             "Enter or select name for this face:",
-            GetExistingNames());
+            GetExistingNames(),
+            _lastAddedName ?? string.Empty);
 
         if (string.IsNullOrWhiteSpace(name)) return;
 
         try
         {
+            var countBefore = _vectorStore.Count;
             var detectedFaces = _recognizer.ExtractAllFaces(imagePath);
             if (detectedFaces.Count == 0) return;
 
@@ -153,6 +157,8 @@ public partial class ResultsViewModel : ObservableObject
                 Thumbnail = thumb
             };
             _vectorStore.Add(face);
+            _lastAddedName = name;
+            Debug.Assert(_vectorStore.Count == countBefore + 1, "Vector store count did not increase by 1 after Add");
 
             // Add to in-memory known faces
             _allKnownFaces.Add(new RecognizedFaceViewModel
@@ -192,6 +198,9 @@ public partial class ResultsViewModel : ObservableObject
                 }
             }
 
+            Debug.Assert(newlyMatched.Count + stillUnknown.Count == remainingUnknowns.Count,
+                "Every remaining unknown face must be classified exactly once");
+
             // Add newly matched to known
             foreach (var (path, matchedName, score) in newlyMatched)
             {
@@ -226,9 +235,13 @@ public partial class ResultsViewModel : ObservableObject
                 }
             }
 
+            Debug.Assert(UnknownClusters.Sum(c => c.FaceCount) == stillUnknown.Count,
+                "Re-clustering lost or duplicated faces");
+
             // Update names list and refresh
             RefreshKnownPeopleNames();
             RefreshKnownFaces();
+            Debug.Assert(KnownPeopleNames.Any(n => n.Name == name), "Added name missing from people list");
         }
         catch (Exception ex)
         {
