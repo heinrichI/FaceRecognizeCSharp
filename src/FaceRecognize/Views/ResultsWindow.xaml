@@ -85,6 +85,17 @@
                                                                               Command="{Binding DataContext.OpenImageCommand, Source={x:Reference RootWindow}}"
                                                                               CommandParameter="{Binding ImagePath}" />
                                                             </Image.InputBindings>
+                                                            <Image.ContextMenu>
+                                                                <ContextMenu>
+                                                                    <MenuItem Header="Change name"
+                                                                              Command="{Binding DataContext.ChangeNameCommand, Source={x:Reference RootWindow}}"
+                                                                              CommandParameter="{Binding}" />
+                                                                    <Separator />
+                                                                    <MenuItem Header="Show info"
+                                                                              Command="{Binding DataContext.ShowInfoCommand, Source={x:Reference RootWindow}}"
+                                                                              CommandParameter="{Binding ImagePath}" />
+                                                                </ContextMenu>
+                                                            </Image.ContextMenu>
                                                         </Image>
                                                         <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="Gray">
                                                             <Run Text="{Binding Confidence, StringFormat={}{0:P1}}" />

@@ -199,6 +199,77 @@ public partial class ResultsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ChangeName(RecognizedFaceViewModel? face)
+    {
+        if (face is null || string.IsNullOrEmpty(face.ImagePath)) return;
+
+        var name = Views.InputDialog.ShowDialog(
+            "Change Name",
+            "Enter or select the correct name for this face:",
+            GetExistingNames(),
+            _enrollmentService.LastEnrolledName);
+
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        try
+        {
+            // Пере-матчинг неизвестных лиц, как в AddToKnown:
+            // новый дескриптор может подобрать остальные фото этого человека.
+            var currentUnknownFaces = UnknownClusters
+                .SelectMany(c => c.Faces)
+                .Select(f => new ClusterFace
+                {
+                    ImagePath = f.ImagePath,
+                    Embedding = f.Embedding ?? [],
+                    Thumbnail = f.Thumbnail
+                })
+                .ToList();
+
+            var response = _enrollmentService.AddToKnown(
+                new AddToKnownRequest(face.ImagePath, name, _distanceThreshold, currentUnknownFaces));
+
+            // Фото «переезжает» из группы старого человека в группу нового (без дублирования)
+            face.Name = name;
+
+            // Новые совпадения среди оставшихся неизвестных
+            foreach (var matched in response.NewlyMatched)
+            {
+                _allKnownFaces.Add(new RecognizedFaceViewModel
+                {
+                    ImagePath = matched.ImagePath,
+                    Name = matched.Name,
+                    Confidence = matched.Confidence,
+                    Thumbnail = matched.Thumbnail
+                });
+            }
+
+            // Пере-кластеризованные оставшиеся неизвестные
+            UnknownClusters.Clear();
+            foreach (var cluster in response.RemainingClusters)
+            {
+                UnknownClusters.Add(new PersonClusterViewModel
+                {
+                    ClusterId = cluster.ClusterId,
+                    FaceCount = cluster.Faces.Count,
+                    Faces = new ObservableCollection<ClusterFaceViewModel>(cluster.Faces.Select(f => new ClusterFaceViewModel
+                    {
+                        ImagePath = f.ImagePath,
+                        Embedding = f.Embedding,
+                        Thumbnail = f.Thumbnail
+                    }))
+                });
+            }
+
+            RefreshKnownPeopleNames();
+            RefreshKnownFaces();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
     private void ShowInfo(string? imagePath)
     {
         if (string.IsNullOrEmpty(imagePath)) return;
